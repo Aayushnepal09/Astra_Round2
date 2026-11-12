@@ -1,0 +1,8 @@
+Use case: illustration-story
+Asset type: square welcoming illustration for an agreement-signing login screen.
+Primary request: polished flat editorial illustration of one friendly smiling young adult waving hello. Waist-up, cornflower-blue sweater, crisp small white shirt collar, warm peach skin, wavy dark brown hair, simple expressive face. Raised hand at right. A large darker orange circle behind the person. Small pale yellow speech bubble at upper left with exact lowercase handwritten text "hello".
+Style/medium: clean professional flat vector-like illustration rendered as a raster image, bold smooth shapes, almost no shading, warm and approachable, visually similar to classic orange-and-blue friendly login illustrations.
+Composition/framing: square, centered figure, generous orange negative space around the entire illustration. Figure and waving hand fit entirely inside frame. Bottom of sweater ends cleanly along lower part of circular backdrop. No extraneous objects.
+Scene/backdrop: full-bleed solid warm orange background exactly #ffb447, edge-to-edge. Deeper orange circle #ffa327, blue sweater #699bf3, yellow speech bubble #ffda67.
+Text (verbatim): "hello" only inside speech bubble.
+Constraints: no UI, no logos, no watermark, no gradients, no texture, no 3D, no extra people, no other text. Generate a square image at about 1024 by 1024.

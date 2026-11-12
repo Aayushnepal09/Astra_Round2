@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#9cbce8">
+  <meta name="description" content="Access your Astra agreement or sign in to your company workspace.">
+  <title>Company login · Astra</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23ffb447'/%3E%3Cpath d='M32 12v40M12 32h40M18 18l28 28M18 46l28-28' stroke='%23294768' stroke-width='7' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <svg class="backdrop" viewBox="0 0 1440 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <path fill="#fffaf0" d="M190-100C400 30 557-113 722 15s-80 275 168 346 488-18 605 164 81 490-179 501-353-212-616-140S-82 996 51 734 237 451 64 348 46 24 190-100Z"/>
+    <path fill="#7196df" d="M1220-64c-193 81-237 194-157 269s335-33 409-154V-64ZM-45 601c183 51 214 165 127 251S61 1031 162 1100H-45Z"/>
+    <g fill="none" stroke="#efba63" stroke-width="1.4" opacity=".8">
+      <path d="M-80 206C95 102 228 420 362 165S567 57 727-24M672-51C545 210 951 345 1064 109S1090-103 1179-50M-12 732C229 758 215 496 414 512S503 847 698 1024M1432 737c-203-138-228 240-494 300"/>
+    </g>
+  </svg>
+
+  <div class="page">
+    <header class="site-header">
+      <span class="brand" aria-label="Astra">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3v26M3 16h26M7 7l18 18M7 25 25 7"/></svg>
+        astra<span class="brand-dot">.</span>
+      </span>
+      <span class="header-note">Good agreements start here.</span>
+    </header>
+
+    <main class="login-card">
+      <aside class="welcome-panel" aria-labelledby="welcome-heading">
+        <img class="welcome-art" src="assets/welcome.png" alt="" width="1254" height="1254" fetchpriority="high">
+        <div class="welcome-copy">
+          <h2 id="welcome-heading">A little hello.<br>A big next step.</h2>
+          <p>Your agreements, a little simpler.<br> Let’s get you where you need to be.</p>
+        </div>
+        <svg class="panel-flower" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3v26M3 16h26M7 7l18 18M7 25 25 7"/></svg>
+      </aside>
+
+      <section class="form-panel" aria-labelledby="form-heading">
+        <div class="form-heading">
+          <h1 id="form-heading">Welcome back.</h1>
+          <p id="form-description">Log in to your company workspace.</p>
+        </div>
+
+        <form id="access-form" novalidate aria-describedby="preview-note">
+          <div class="field" id="email-field">
+            <label for="email">Work email</label>
+            <div class="input-wrap">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6"/></svg>
+              <input id="email" name="email" type="email" autocomplete="username" placeholder="you@company.com" required aria-describedby="email-error">
+            </div>
+            <p class="field-error" id="email-error" hidden></p>
+          </div>
+
+          <div class="field" id="password-field">
+            <label for="password">Password</label>
+            <div class="input-wrap">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></svg>
+              <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required aria-describedby="password-error">
+              <button class="password-toggle" type="button" aria-label="Show password" aria-pressed="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="eye-slash" d="m3 3 18 18" hidden/></svg>
+              </button>
+            </div>
+            <p class="field-error" id="password-error" hidden></p>
+          </div>
+
+          <div class="field" id="code-field" hidden>
+            <label for="code">Access code</label>
+            <div class="input-wrap code-wrap">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="9" r="5"/><path d="m11.5 12.5 8 8M16 17l3-3M18 19l3-3"/></svg>
+              <input id="code" name="code" type="text" autocomplete="one-time-code" placeholder="Enter your access code" disabled aria-describedby="code-hint code-error">
+            </div>
+            <p class="field-hint" id="code-hint">Use the code that came with your signing invitation.</p>
+            <p class="field-error" id="code-error" hidden></p>
+          </div>
+
+          <div class="help-row">
+            <details id="access-help">
+              <summary>Need help signing in?</summary>
+              <p id="help-copy">Ask your company administrator for help with your account or a password reset.</p>
+            </details>
+          </div>
+
+          <button class="submit-button" type="submit">
+            <span id="submit-label">Log in</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6"/></svg>
+          </button>
+          <p class="form-status" id="form-status" role="status" hidden></p>
+        </form>
+
+        <p class="access-note" id="access-note">Your workspace. Everything in one place.</p>
+        <p class="preview-note" id="preview-note">UI preview · Sign-in is not connected yet.</p>
+      </section>
+    </main>
+
+    <footer class="site-footer"><span>Less paperwork. More possibilities.</span><span>Astra agreement portal</span></footer>
+  </div>
+</body>
+</html>
