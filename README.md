@@ -2,6 +2,14 @@
 
 Planned agreement workflows for company staff and client signers.
 
+## Local UI
+
+Run `python backend/manage.py runserver` in the existing virtual environment, then open `http://127.0.0.1:8000/company/login/`. Company sign-in opens the protected dashboard.
+
+All interface code is in `frontend/`. Login and dashboard each have one HTML, CSS, and JavaScript file. Shared templates, theme, controls, session helpers, and assets are in `frontend/shared/`.
+
+The dashboard currently includes responsive overview, client-file, agreement-template, and guidance views, plus search, filters, and logout. File creation, uploads, and signing are not connected yet; unavailable actions are labelled and no signing records are fabricated. No new frontend dependencies are required.
+
 ## Company workflow
 
 ```mermaid
@@ -19,14 +27,14 @@ flowchart TD
     H -- No --> I["Show setup issues for company to correct"]
     I --> G
     H -- Yes --> J["Issue signing request using a fixed agreement version"]
-    J --> K["Email client signer a unique signing link and access code"]
+    J --> K["Display demo signing link, access code, expiry,<br/>and Open/Copy controls; no email is sent"]
     K --> L["Dashboard tracks signing progress"]
 
     L --> M{"Signing service confirms<br/>all required signatures?"}
     M -- No --> N{"Client signature confirmed,<br/>company signature required,<br/>and company not yet invited?"}
     N -- Yes --> O["Invite company countersigner"]
     O --> L
-    N -- No --> P["Wait for the active signer;<br/>send scheduled reminders only while pending"]
+    N -- No --> P["Wait for the active signer;<br/>real email reminders are deferred"]
     P --> L
 
     M -- Yes --> Q["Retrieve and save completed PDF and signing history"]
@@ -40,7 +48,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["Receive email with signing link and access code"] --> B["Open signing link"]
+    A["Use signing link and access code<br/>displayed in the company demo invitation"] --> B["Open signing link"]
     B --> C["Enter access code"]
     C --> D{"Code valid for this signer and request?"}
 

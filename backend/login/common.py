@@ -23,11 +23,12 @@ def read_json(request):
 
 
 def render_login(request, role, authenticated=False):
-    response = render(request, "index.html", {
+    response = render(request, "login.html", {
         "login_role": role,
         "login_url": request.path,
         "logout_url": reverse(f"{role}_logout"),
         "authenticated": "true" if authenticated else "false",
+        "dashboard_url": reverse("company_dashboard") if role == "company" else "",
         "static_prefix": settings.STATIC_URL,
     })
     response["Cache-Control"] = "no-store"
@@ -38,7 +39,8 @@ def render_login(request, role, authenticated=False):
 def auth_result(request, role):
     response = JsonResponse({
         "authenticated": True, "role": role,
-        "message": f"You’re logged in. Your {role} dashboard will be added next.",
+        "message": "You’re logged in.",
+        "dashboardUrl": reverse("company_dashboard") if role == "company" else None,
         "csrfToken": get_token(request),
     })
     response["Cache-Control"] = "no-store"

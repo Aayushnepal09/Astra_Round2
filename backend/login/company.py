@@ -11,6 +11,8 @@ from django.core.validators import validate_email
 from django.db.models import Case, DateTimeField, F, Q, When
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
+from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views import View
 from django.views.decorators.debug import sensitive_variables
@@ -62,7 +64,9 @@ def _reserve_attempts(keys):
 
 class CompanyLogin(View):
     def get(self, request):
-        return render_login(request, "company", authenticated=_company_authenticated(request))
+        if _company_authenticated(request):
+            return redirect("company_dashboard")
+        return render_login(request, "company")
 
     @sensitive_variables("payload", "password")
     def post(self, request):
@@ -91,6 +95,31 @@ class CompanyLogin(View):
         request.session.set_expiry(0)
         LoginAttempt.objects.filter(key=keys[0]).delete()
         return auth_result(request, "company")
+
+
+class CompanyDashboard(View):
+    def get(self, request):
+        if not _company_authenticated(request):
+            return redirect("company_login")
+        account = request.user
+        account_name = account.get_short_name() or "Your account"
+        company_name = account.company_name or "Company workspace"
+        response = render(request, "dashboard.html", {
+            "company_name": company_name,
+            "company_initial": company_name[:1].upper(),
+            "account_name": account_name,
+            "account_initial": account_name[:1].upper(),
+            "account_email": account.email,
+            "session_url": reverse("company_session"),
+            "logout_url": reverse("company_logout"),
+            "login_url": reverse("company_login"),
+            "static_prefix": settings.STATIC_URL,
+            # Domain records will be connected when client-file creation is built.
+            "workspace_data": {"files": []},
+        })
+        response["Cache-Control"] = "no-store"
+        response["Referrer-Policy"] = "same-origin"
+        return response
 
 
 class CompanySession(View):
