@@ -5,12 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#9cbce8">
   <meta name="description" content="Access your Astra agreement or sign in to your company workspace.">
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <title>Company login · Astra</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23ffb447'/%3E%3Cpath d='M32 12v40M12 32h40M18 18l28 28M18 46l28-28' stroke='%23294768' stroke-width='7' stroke-linecap='round'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css">
-  <script src="app.js" defer></script>
+  <link rel="stylesheet" href="{{ static_prefix|default:'' }}styles.css">
+  <script src="{{ static_prefix|default:'' }}app.js" defer></script>
 </head>
-<body>
+<body data-role="{{ login_role }}" data-login-url="{{ login_url }}" data-logout-url="{{ logout_url }}" data-authenticated="{{ authenticated }}">
   <svg class="backdrop" viewBox="0 0 1440 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
     <path fill="#fffaf0" d="M190-100C400 30 557-113 722 15s-80 275 168 346 488-18 605 164 81 490-179 501-353-212-616-140S-82 996 51 734 237 451 64 348 46 24 190-100Z"/>
     <path fill="#7196df" d="M1220-64c-193 81-237 194-157 269s335-33 409-154V-64ZM-45 601c183 51 214 165 127 251S61 1031 162 1100H-45Z"/>
@@ -30,7 +31,7 @@
 
     <main class="login-card">
       <aside class="welcome-panel" aria-labelledby="welcome-heading">
-        <img class="welcome-art" src="assets/welcome.png" alt="" width="1254" height="1254" fetchpriority="high">
+        <img class="welcome-art" src="{{ static_prefix|default:'' }}assets/welcome.png" alt="" width="1254" height="1254" fetchpriority="high">
         <div class="welcome-copy">
           <h2 id="welcome-heading">A little hello.<br>A big next step.</h2>
           <p>Your agreements, a little simpler.<br> Let’s get you where you need to be.</p>
@@ -44,7 +45,7 @@
           <p id="form-description">Log in to your company workspace.</p>
         </div>
 
-        <form id="access-form" novalidate aria-describedby="preview-note">
+        <form id="access-form" novalidate>
           <div class="field" id="email-field">
             <label for="email">Work email</label>
             <div class="input-wrap">
@@ -91,7 +92,6 @@
         </form>
 
         <p class="access-note" id="access-note">Your workspace. Everything in one place.</p>
-        <p class="preview-note" id="preview-note">UI preview · Sign-in is not connected yet.</p>
       </section>
     </main>
 

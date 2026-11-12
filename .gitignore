@@ -1,1 +1,9 @@
 /instructions/
+/.venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+/backend/.local/
+*.sqlite3
+*.sqlite3-*
