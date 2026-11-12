@@ -1,0 +1,90 @@
+{% extends "shared/base.html" %}
+{% block title %}Your workspace · Astra{% endblock %}
+{% block resources %}
+  <link rel="stylesheet" href="{{ static_prefix }}dashboard.css">
+  <script type="module" src="{{ static_prefix }}dashboard.js"></script>
+{% endblock %}
+{% block body_attributes %}class="dashboard" data-session-url="{{ session_url }}" data-logout-url="{{ logout_url }}" data-login-url="{{ login_url }}"{% endblock %}
+{% block content %}
+  <a class="skip-link" href="#workspace-main">Skip to workspace</a>
+  <aside class="sidebar" aria-label="Workspace navigation">
+    <div class="sidebar-heading">
+      <a class="brand" href="#overview" data-view="overview" aria-label="Astra overview"><svg aria-hidden="true"><use href="#astra-mark"/></svg>astra<span class="brand-dot">.</span></a>
+      <button class="menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="workspace-navigation"><svg class="icon" aria-hidden="true"><use href="#icon-menu"/></svg></button>
+    </div>
+    <div class="sidebar-content" id="workspace-navigation">
+      <div class="workspace-identity">
+        <span class="workspace-avatar" aria-hidden="true">{{ company_initial }}</span>
+        <div><strong>{{ company_name }}</strong><span>Company workspace</span></div>
+      </div>
+      <nav class="main-navigation" aria-label="Main">
+        <a class="nav-link" href="#overview" data-view="overview" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#icon-grid"/></svg>Overview</a>
+        <a class="nav-link" href="#files" data-view="files"><svg class="icon" aria-hidden="true"><use href="#icon-folder"/></svg>Client files<span class="nav-count" data-count="all">0</span></a>
+        <a class="nav-link" href="#templates" data-view="templates"><svg class="icon" aria-hidden="true"><use href="#icon-document"/></svg>Agreement templates</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="sidebar-note"><svg aria-hidden="true"><use href="#astra-mark"/></svg><p>A little less paperwork.<br>A little more possibility.</p></div>
+        <a class="nav-link" href="#help" data-view="help"><svg class="icon" aria-hidden="true"><use href="#icon-help"/></svg>Help & guidance</a>
+        <span class="workspace-private"><svg class="icon" aria-hidden="true"><use href="#icon-shield"/></svg>Your company workspace</span>
+      </div>
+    </div>
+  </aside>
+
+  <div class="workspace-shell">
+    <header class="workspace-header">
+      <div class="breadcrumb"><span>Workspace</span><span aria-hidden="true">/</span><strong id="current-location">Overview</strong></div>
+      <details class="account-menu">
+        <summary aria-label="Account menu for {{ account_name }}"><span class="account-avatar" aria-hidden="true">{{ account_initial }}</span><span class="account-name">{{ account_name }}<small>Company account</small></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron"/></svg></summary>
+        <div class="account-dropdown"><strong>{{ account_name }}</strong><span>{{ account_email }}</span><button class="logout-button" type="button"><svg class="icon" aria-hidden="true"><use href="#icon-logout"/></svg><span>Log out</span></button></div>
+      </details>
+    </header>
+
+    <main class="workspace-main" id="workspace-main" tabindex="-1">
+      <noscript><p class="workspace-alert">Enable JavaScript to switch workspace views and use account actions.</p></noscript>
+      <div class="page-heading"><div><h1 id="page-title">Your workspace, a little simpler.</h1><p id="page-description">A clear view of your client files, from first agreement to ready to start.</p></div><a class="button secondary heading-action" href="#files" data-view="files"><svg class="icon" aria-hidden="true"><use href="#icon-folder"/></svg>Client files</a></div>
+      <p class="preview-note"><span>UI preview</span> File creation and agreement preparation are coming next. No signing requests have been created.</p>
+      <div class="workspace-alert" id="workspace-error" role="alert" hidden><div><strong>We couldn’t refresh your workspace.</strong><p id="workspace-error-message"></p></div><button class="button secondary" type="button" id="retry-session">Try again</button></div>
+      <p class="sr-only" id="workspace-status" role="status" aria-live="polite"></p>
+
+      <section class="workspace-view" id="view-overview" aria-label="Overview">
+        <section class="setup-banner" aria-labelledby="setup-title">
+          <div class="setup-copy"><h2 id="setup-title">A good beginning.<br>A reusable agreement.</h2><p>Bring the agreement you already use. Prepare it once, then make every new client file a little easier.</p><a class="button" href="#templates" data-view="templates">Set up an agreement<svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></a><span class="setup-footnote">Your document. Your fields. Ready to reuse.</span></div>
+          <img src="{{ static_prefix }}shared/assets/welcome.png" class="setup-art" alt="" width="1254" height="1254">
+        </section>
+
+        <div class="workspace-metrics" aria-label="Client file summary">
+          <button class="metric" type="button" data-filter-link="all"><span>Client files<svg class="icon" aria-hidden="true"><use href="#icon-folder"/></svg></span><strong data-count="all">0</strong><small>Jobs and cases in your workspace</small></button>
+          <button class="metric" type="button" data-filter-link="waiting"><span>Awaiting signature<svg class="icon" aria-hidden="true"><use href="#icon-clock"/></svg></span><strong data-count="waiting">0</strong><small>Waiting on a required signer</small></button>
+          <button class="metric" type="button" data-filter-link="ready"><span>Ready to start<svg class="icon" aria-hidden="true"><use href="#icon-check"/></svg></span><strong data-count="ready">0</strong><small>All signed. Final records saved.</small></button>
+          <button class="metric" type="button" data-filter-link="attention"><span>Needs attention<svg class="icon" aria-hidden="true"><use href="#icon-help"/></svg></span><strong data-count="attention">0</strong><small>Setup or processing to resolve</small></button>
+        </div>
+
+        <div class="overview-columns">
+          <section class="panel recent-files" aria-labelledby="recent-title"><div class="section-heading"><div><h2 id="recent-title">Client files</h2><p>A home for every client agreement.</p></div><a class="text-link" href="#files" data-view="files">View all<svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></a></div><div class="table-container"><table><caption class="sr-only">Recent client files</caption><thead><tr><th scope="col">Client / file</th><th scope="col">Agreement status</th><th scope="col">Updated</th></tr></thead><tbody id="recent-file-rows"></tbody></table></div><div class="empty-state" id="recent-empty"><span class="empty-symbol"><svg aria-hidden="true"><use href="#icon-folder"/></svg></span><h3>A clean slate for your next client.</h3><p>Your client files will appear here, with their agreement progress and next steps.</p><a class="text-link" href="#help" data-view="help">See how it works<svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></a></div></section>
+          <aside class="getting-started" aria-labelledby="getting-started-title"><div class="section-heading"><h2 id="getting-started-title">Your first steps</h2><span class="step-count">0 of 3</span></div><ol class="setup-steps"><li class="current"><span class="step-number">1</span><div><a href="#templates" data-view="templates">Prepare your agreement<svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></a><p>Place fields and assign signer roles.</p></div></li><li><span class="step-number">2</span><div><strong>Create a client file</strong><p>Add client details and choose a template.</p></div></li><li><span class="step-number">3</span><div><strong>Send a signing request</strong><p>Check the details, then share demo access.</p></div></li></ol><div class="readiness-note"><svg class="icon" aria-hidden="true"><use href="#icon-shield"/></svg><div><strong>Ready means ready.</strong><p>A file is ready to start once every required signature, the completed PDF, and signing history are saved.</p></div></div></aside>
+        </div>
+      </section>
+
+      <section class="workspace-view" id="view-files" aria-label="Client files" hidden>
+        <section class="panel files-workspace" aria-labelledby="files-title">
+          <div class="section-heading"><div><h2 id="files-title">All client files <span class="inline-count" data-count="all">0</span></h2><p>One file for each job or case. One place to follow its agreement.</p></div><button class="button" type="button" disabled aria-describedby="create-file-hint"><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg>New client file</button></div>
+          <p class="availability-note" id="create-file-hint">Client-file creation is coming next. Prepare a reusable agreement before issuing a signing request.</p>
+          <div class="file-tools"><div class="input-wrap file-search"><svg aria-hidden="true"><use href="#icon-search"/></svg><label class="sr-only" for="file-search">Search client files</label><input id="file-search" type="search" placeholder="Search by client, file or reference" autocomplete="off"></div><label class="sort-control" for="file-sort">Sort by<select id="file-sort"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="name">Client name</option></select></label></div>
+          <div class="filter-controls" role="group" aria-label="Filter client files"><button type="button" data-filter="all" aria-pressed="true">All files</button><button type="button" data-filter="waiting" aria-pressed="false">Awaiting signature</button><button type="button" data-filter="ready" aria-pressed="false">Ready to start</button><button type="button" data-filter="attention" aria-pressed="false">Needs attention</button></div>
+          <div class="table-container"><table><caption class="sr-only">Client files matching the selected filter</caption><thead><tr><th scope="col">Client / file</th><th scope="col">Agreement status</th><th scope="col">Updated</th></tr></thead><tbody id="all-file-rows"></tbody></table></div>
+          <div class="empty-state" id="files-empty"><span class="empty-symbol"><svg aria-hidden="true"><use href="#icon-folder"/></svg></span><h3 id="files-empty-title">Your next client starts here.</h3><p id="files-empty-copy">Once client files are created, you can search them and follow every signing stage here.</p><button class="button secondary" type="button" id="reset-filters" hidden>Clear filters</button><a class="text-link" href="#templates" data-view="templates" id="files-template-link">Explore agreement setup<svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></a></div>
+        </section>
+      </section>
+
+      <section class="workspace-view" id="view-templates" aria-label="Agreement templates" hidden>
+        <section class="panel templates-workspace"><div class="section-heading"><div><h2>Agreement templates</h2><p>Prepare once. Use the published version for each new client file.</p></div><span class="inline-count">0 templates</span></div><div class="template-empty"><span class="template-symbol"><svg aria-hidden="true"><use href="#icon-document"/></svg></span><h2>Your agreement.<br>A simpler next time.</h2><p>Start with the document your company already uses. Review its pages, place the required fields, and choose who completes each one.</p><button class="button" type="button" disabled aria-describedby="template-availability"><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg>Upload an agreement</button><p class="availability-note" id="template-availability">Agreement uploads and field preparation are coming next. No document has been uploaded or saved.</p></div><div class="template-principles"><div><svg class="icon" aria-hidden="true"><use href="#icon-document"/></svg><strong>Keep the original</strong><p>Review the document before preparing its fields.</p></div><div><svg class="icon" aria-hidden="true"><use href="#icon-check"/></svg><strong>Assign every field</strong><p>Set required fields and client or company roles.</p></div><div><svg class="icon" aria-hidden="true"><use href="#icon-shield"/></svg><strong>Keep issued versions fixed</strong><p>Template changes apply to future requests.</p></div></div></section>
+      </section>
+
+      <section class="workspace-view" id="view-help" aria-label="Help and guidance" hidden>
+        <section class="panel guidance"><h2>A little guidance goes a long way.</h2><p>Here’s how an agreement moves through your workspace.</p><details open><summary>What is a client file?</summary><p>A client file represents one job or case for one client. It brings together client details, its agreement request, and the signing history.</p></details><details><summary>How do agreement templates work?</summary><p>Upload the agreement your company uses, review every page, place fields, and assign signer roles. Once a version is published, it can be reused. Editing a template does not change an agreement already issued.</p></details><details><summary>Does creating a file send the agreement?</summary><p>No. Confirm the document, signer details, and company values first. A separate <strong>Send request — Demo</strong> action creates the request after those checks pass.</p></details><details><summary>How will demo invitations work?</summary><p>No email is sent. The company view will show the signing link, access code, expiry countdown, and Open/Copy controls below the send button. The client must verify the code before viewing the agreement.</p></details><details><summary>When is a file ready to start?</summary><p>The client signs first. If required, the company countersigns next. The file becomes ready only after all required signatures are confirmed and both the completed PDF and signing history have been saved.</p></details><details><summary>What can I use in this UI preview?</summary><p>You can move between views, explore file search and filters, and log out. File creation, document uploads, field preparation, and signing actions are not available yet. Nothing in this preview sends an invitation or records a signature.</p></details><details><summary>Need help with your account?</summary><p>Ask your company administrator for help with access or a password reset.</p></details></section>
+      </section>
+      <footer class="workspace-footer"><span>Less paperwork. More possibilities.</span><span>Astra agreement portal</span></footer>
+    </main>
+  </div>
+  {{ workspace_data|json_script:"workspace-data" }}
+{% endblock %}

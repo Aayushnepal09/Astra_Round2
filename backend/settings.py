@@ -56,9 +56,9 @@ else:
         "PORT": os.environ.get("DJANGO_DB_PORT", ""),
     }}
 
-TEMPLATES = [{"BACKEND": "django.template.backends.django.DjangoTemplates", "DIRS": [BASE_DIR.parent / "shared-ui"], "APP_DIRS": False}]
+TEMPLATES = [{"BACKEND": "django.template.backends.django.DjangoTemplates", "DIRS": [BASE_DIR.parent / "frontend"], "APP_DIRS": False}]
 STATIC_URL = "/static/"
-STATICFILES_DIRS = [BASE_DIR.parent / "shared-ui"]
+STATICFILES_DIRS = [BASE_DIR.parent / "frontend"]
 STATIC_ROOT = DATA_DIR / "static"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 USE_TZ = True
