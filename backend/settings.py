@@ -23,7 +23,7 @@ if not SECRET_KEY:
 
 ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
 ROOT_URLCONF = "urls"
-INSTALLED_APPS = ["django.contrib.auth", "django.contrib.contenttypes", "django.contrib.sessions", "django.contrib.staticfiles", "login", "client_files"]
+INSTALLED_APPS = ["django.contrib.auth", "django.contrib.contenttypes", "django.contrib.sessions", "django.contrib.staticfiles", "login", "client_files", "agreements"]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -60,6 +60,8 @@ TEMPLATES = [{"BACKEND": "django.template.backends.django.DjangoTemplates", "DIR
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR.parent / "frontend"]
 STATIC_ROOT = DATA_DIR / "static"
+# Private documents are never served through Django's static/media URL handling.
+AGREEMENT_STORAGE_ROOT = Path(os.environ.get("DJANGO_AGREEMENT_STORAGE_ROOT", DATA_DIR / "agreements"))
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 USE_TZ = True
 TIME_ZONE = "UTC"
@@ -76,6 +78,12 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 
 CLIENT_CODE_TTL = 24 * 60 * 60
 CLIENT_MAX_ATTEMPTS = 5
+CLIENT_VERIFY_SCOPE_MAX_ATTEMPTS = 5
+CLIENT_VERIFY_NETWORK_MAX_ATTEMPTS = 30
+CLIENT_VERIFY_WINDOW = 15 * 60
+CLIENT_GENERATION_MAX_CODES = 5
+CLIENT_GENERATION_WINDOW = 60 * 60
+CLIENT_GENERATION_COOLDOWN = 60
 CLIENT_SESSION_IDLE = 30 * 60
 CLIENT_SESSION_MAX = 2 * 60 * 60
 COMPANY_LOGIN_MAX_ATTEMPTS = 5

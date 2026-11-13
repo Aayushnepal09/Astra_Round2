@@ -16,9 +16,10 @@ from django.conf import settings
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError
 from django.utils import timezone
 
+from login.client_throttle import ClientAccessThrottle, ClientThrottleExceeded
 from login.models import ClientInvitation, CompanyAccount
 
 
@@ -52,7 +53,7 @@ def create_invitation(args):
         expires_at=timezone.now() + timedelta(seconds=settings.CLIENT_CODE_TTL),
     )
     invitation.full_clean()
-    with transaction.atomic():
+    with ClientAccessThrottle.generation(invitation):
         ClientInvitation.objects.filter(
             company=company, client_email=invitation.client_email,
             request_ref=invitation.request_ref, used_at__isnull=True,
@@ -85,6 +86,10 @@ def main():
         parser.error("No active company account matches that email.")
     except IntegrityError:
         parser.error("The account or invitation already exists.")
+    except ClientThrottleExceeded:
+        parser.error("Invitation creation is temporarily limited. Try again later.")
+    except DatabaseError:
+        parser.error("Local storage is unavailable. Try again later.")
     except ValidationError as exc:
         parser.error("; ".join(exc.messages))
 

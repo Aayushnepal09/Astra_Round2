@@ -4,6 +4,7 @@ import re
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password
+from django.db import DatabaseError
 from django.db.models import F
 from django.http import JsonResponse
 from django.middleware.csrf import get_token, rotate_token
@@ -11,6 +12,7 @@ from django.utils import timezone
 from django.views import View
 from django.views.decorators.debug import sensitive_variables
 
+from .client_throttle import ClientAccessThrottle, ClientThrottleExceeded
 from .common import (
     auth_error,
     auth_result,
@@ -20,6 +22,10 @@ from .common import (
     render_login,
 )
 from .models import ClientInvitation
+
+
+class _InvitationUnavailable(Exception):
+    pass
 
 
 def _invalid_code():
@@ -48,32 +54,44 @@ class ClientLogin(View):
     @sensitive_variables("payload", "code")
     def post(self, request, invitation_id=None):
         try:
-            payload = read_json(request)
-        except ValueError as error:
-            return auth_error(str(error))
-        if invitation_id is None:
+            # Commit network admission even when the body or invitation is invalid.
+            ClientAccessThrottle.reserve_network(request)
+            try:
+                payload = read_json(request)
+            except ValueError as error:
+                return auth_error(str(error))
+            if invitation_id is None:
+                return _invalid_code()
+            invitation = ClientInvitation.objects.filter(pk=invitation_id).only(
+                "company_id", "client_email", "request_ref", "code_hash"
+            ).first()
+            if invitation is None:
+                return _invalid_code()
+            with ClientAccessThrottle.verification(invitation):
+                reserved = _available(invitation_id, invitation.code_hash).filter(
+                    attempts__lt=settings.CLIENT_MAX_ATTEMPTS
+                ).update(attempts=F("attempts") + 1)
+                if not reserved:
+                    # Roll back the tuple budget for stale or exhausted invitations.
+                    raise _InvitationUnavailable
+            code = payload.get("code")
+            if set(payload) != {"code"} or not isinstance(code, str) or re.fullmatch(r"[0-9]{6}", code) is None:
+                return _invalid_code()
+            if not check_password(code, invitation.code_hash):
+                return _invalid_code()
+            redeemed = _available(invitation_id, invitation.code_hash).filter(
+                attempts__lte=settings.CLIENT_MAX_ATTEMPTS
+            ).update(used_at=timezone.now())
+            if not redeemed:
+                return _invalid_code()
+            establish_client_session(request, invitation)
+            return auth_result(request, "client")
+        except _InvitationUnavailable:
             return _invalid_code()
-        invitation = ClientInvitation.objects.filter(pk=invitation_id).only("code_hash").first()
-        if invitation is None:
-            return _invalid_code()
-        # Each conditional UPDATE is atomic on SQLite; select_for_update is not.
-        reserved = _available(invitation_id, invitation.code_hash).filter(
-            attempts__lt=settings.CLIENT_MAX_ATTEMPTS
-        ).update(attempts=F("attempts") + 1)
-        if not reserved:
-            return _invalid_code()
-        code = payload.get("code")
-        if set(payload) != {"code"} or not isinstance(code, str) or re.fullmatch(r"[0-9]{6}", code) is None:
-            return _invalid_code()
-        if not check_password(code, invitation.code_hash):
-            return _invalid_code()
-        redeemed = _available(invitation_id, invitation.code_hash).filter(
-            attempts__lte=settings.CLIENT_MAX_ATTEMPTS
-        ).update(used_at=timezone.now())
-        if not redeemed:
-            return _invalid_code()
-        establish_client_session(request, invitation)
-        return auth_result(request, "client")
+        except ClientThrottleExceeded:
+            return auth_error("Unable to verify this code right now. Try again later.", status=429)
+        except DatabaseError:
+            return auth_error("Unable to verify this code right now. Try again later.", status=503)
 
 
 class ClientSession(View):
