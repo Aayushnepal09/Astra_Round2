@@ -107,6 +107,7 @@ class CompanyDashboard(View):
             "workspace_data": CompanyFileWorkspace(request.user).snapshot(),
             "files_url": reverse("company_file_list"),
             "create_file_url": reverse("company_file_create"),
+            "agreements_url": reverse("company_agreement_list"),
         })
         response["Cache-Control"] = "no-store"
         response["Referrer-Policy"] = "same-origin"

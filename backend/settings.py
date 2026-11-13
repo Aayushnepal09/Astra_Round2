@@ -62,6 +62,11 @@ STATICFILES_DIRS = [BASE_DIR.parent / "frontend"]
 STATIC_ROOT = DATA_DIR / "static"
 # Private documents are never served through Django's static/media URL handling.
 AGREEMENT_STORAGE_ROOT = Path(os.environ.get("DJANGO_AGREEMENT_STORAGE_ROOT", DATA_DIR / "agreements"))
+AGREEMENT_MAX_BYTES = 10 * 1024 * 1024
+AGREEMENT_MAX_PAGES = 50
+AGREEMENT_PROCESSING_TIMEOUT = 30
+AGREEMENT_PROCESSING_MAX_MEMORY = 512 * 1024 * 1024
+AGREEMENT_PREVIEW_MAX_EDGE = 1800
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 USE_TZ = True
 TIME_ZONE = "UTC"

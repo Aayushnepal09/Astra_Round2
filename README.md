@@ -10,7 +10,17 @@ All interface code is in `frontend/`. Login and dashboard each have one HTML, CS
 
 Company staff can create, save, reopen, and update client-file drafts. Drafts are stored in the database and scoped to the signed-in company account. The dashboard includes company-wide counts, search, status filters, sorting, and paginated file lists. Saving a draft does not create a signing request or invitation.
 
-Run `python backend/manage.py migrate` after pulling database changes. Local development uses the SQLite database in `backend/.local/`; deployment requires persistent database storage. Agreement uploads, field preparation, and signing are not connected yet. No new frontend dependencies are required.
+Run `python -m pip install -r backend/requirements.txt` in the existing virtual environment, then `python backend/manage.py migrate` after pulling database changes. Local development uses the SQLite database in `backend/.local/`; deployment requires persistent database storage. No frontend dependencies are required.
+
+## Agreement upload and preview
+
+Open **Agreement templates** to upload a PDF, review its pages, and reopen saved agreements. PDF input is limited to **10 MiB and 50 pages**. DOCX conversion, field preparation, template publishing, and signing are deferred. Every uploaded agreement remains **Unprepared**; document validation does not publish a template or change a client file's status.
+
+The server checks the actual PDF and renders every page before saving. Empty, corrupt, encrypted/password-protected, unsupported, oversized, and overlong documents are rejected with an inline explanation. Preview pages load individually, with page navigation and zoom. They are rendered images, so preview text cannot be selected or searched; scanned PDFs do not require OCR for this feature.
+
+Original PDFs are stored unchanged through the existing private storage layer. Each saved agreement and preview request requires company authentication and ownership. Documents are not served through static/media URLs. Refreshing or signing in again preserves the saved agreement list; a selected agreement has a workspace link that can be reopened.
+
+`pypdfium2` (with its bundled PDFium engine) and Pillow perform local rendering without an external service or API charge. This uses server CPU and memory and requires a supported native PDFium wheel. Processing runs in a separate process with a 30-second timeout, a 512 MiB memory cap, and a maximum 1800-pixel preview edge. Limits are centralized in `backend/settings.py`. Large or complex PDFs may need to be re-exported to fit processing limits. A deployed host needs persistent private disk storage at `DJANGO_AGREEMENT_STORAGE_ROOT` as well as its database; the local default is `backend/.local/agreements/`. Keep this directory outside public/static/media folders and out of Git. Free-tier storage and compute quotas still apply.
 
 ## Company workflow
 

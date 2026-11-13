@@ -1,4 +1,5 @@
 import { SessionClient } from './shared/ui.js';
+import { AgreementWorkspace } from './agreements.js';
 
 class WorkspaceDashboard {
   static views = new Map([
@@ -21,6 +22,7 @@ class WorkspaceDashboard {
 
   constructor(data) {
     this.client = new SessionClient();
+    this.agreements = new AgreementWorkspace(route => this.navigate(route));
     this.files = new Map();
     this.dateFormatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     this.filter = 'all';
@@ -116,7 +118,10 @@ class WorkspaceDashboard {
   }
 
   navigate(view, updateHistory = true, focus = true) {
+    let route = view;
+    view = view.split('/')[0];
     if (!WorkspaceDashboard.views.has(view)) view = 'overview';
+    if (view !== 'templates') route = view;
     const current = WorkspaceDashboard.views.get(view);
     document.querySelectorAll('.workspace-view').forEach(section => { section.hidden = section.id !== `view-${view}`; });
     document.querySelectorAll('.sidebar .nav-link').forEach(link => {
@@ -129,7 +134,8 @@ class WorkspaceDashboard {
     document.querySelector('#page-description').textContent = current.description;
     document.querySelector('.heading-action').hidden = view !== 'overview';
     document.title = `${current.label} · Astra`;
-    if (updateHistory && window.location.hash !== `#${view}`) window.history.pushState(null, '', `#${view}`);
+    if (updateHistory && window.location.hash !== `#${route}`) window.history.pushState(null, '', `#${route}`);
+    this.agreements.navigate(route);
     this.setMenu(false);
     if (focus) {
       heading.tabIndex = -1;
@@ -268,6 +274,7 @@ class WorkspaceDashboard {
   async logout() {
     const button = document.querySelector('.logout-button');
     if (button.disabled) return;
+    this.agreements.dispose();
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
     button.querySelector('span').textContent = 'Logging out…';
@@ -278,6 +285,7 @@ class WorkspaceDashboard {
       if (error.status === 401) return window.location.replace(document.body.dataset.loginUrl);
       this.account.open = false;
       this.showError('We couldn’t log you out.', error.message + ' Open your account menu to try logging out again.');
+      this.agreements.navigate(window.location.hash.slice(1));
       this.error.scrollIntoView({ block: 'nearest' });
     } finally {
       button.disabled = false;

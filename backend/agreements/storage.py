@@ -106,5 +106,9 @@ class PrivateDocumentStorage:
     def open(self, key):
         return self._path(key).open("rb")
 
+    def delete(self, key):
+        """Remove only an artifact in this agreement's private namespace."""
+        self._path(key).unlink(missing_ok=True)
+
     def url(self, key):
         raise NotImplementedError("Private artifacts are available only through authorized views.")
