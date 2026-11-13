@@ -17,12 +17,13 @@ from django.utils import timezone
 from django.views import View
 from django.views.decorators.debug import sensitive_variables
 
-from .common import auth_error, auth_result, read_json, render_login
+from client_files.workspace import CompanyFileWorkspace
+
+from .common import (
+    auth_error, auth_result, company_authenticated, company_context, read_json,
+    render_login,
+)
 from .models import LoginAttempt
-
-
-def _company_authenticated(request):
-    return request.user.is_authenticated and not request.session.get("client_invitation")
 
 
 def _attempt_keys(request, email):
@@ -64,7 +65,7 @@ def _reserve_attempts(keys):
 
 class CompanyLogin(View):
     def get(self, request):
-        if _company_authenticated(request):
+        if company_authenticated(request):
             return redirect("company_dashboard")
         return render_login(request, "company")
 
@@ -99,23 +100,13 @@ class CompanyLogin(View):
 
 class CompanyDashboard(View):
     def get(self, request):
-        if not _company_authenticated(request):
+        if not company_authenticated(request):
             return redirect("company_login")
-        account = request.user
-        account_name = account.get_short_name() or "Your account"
-        company_name = account.company_name or "Company workspace"
         response = render(request, "dashboard.html", {
-            "company_name": company_name,
-            "company_initial": company_name[:1].upper(),
-            "account_name": account_name,
-            "account_initial": account_name[:1].upper(),
-            "account_email": account.email,
-            "session_url": reverse("company_session"),
-            "logout_url": reverse("company_logout"),
-            "login_url": reverse("company_login"),
-            "static_prefix": settings.STATIC_URL,
-            # Domain records will be connected when client-file creation is built.
-            "workspace_data": {"files": []},
+            **company_context(request),
+            "workspace_data": CompanyFileWorkspace(request.user).snapshot(),
+            "files_url": reverse("company_file_list"),
+            "create_file_url": reverse("company_file_create"),
         })
         response["Cache-Control"] = "no-store"
         response["Referrer-Policy"] = "same-origin"
@@ -124,14 +115,14 @@ class CompanyDashboard(View):
 
 class CompanySession(View):
     def get(self, request):
-        if not _company_authenticated(request):
+        if not company_authenticated(request):
             return auth_error("Company sign-in is required.", status=401)
         return auth_result(request, "company")
 
 
 class CompanyLogout(View):
     def post(self, request):
-        if not _company_authenticated(request):
+        if not company_authenticated(request):
             return auth_error("Company sign-in is required.", status=401)
         logout(request)
         return JsonResponse({"authenticated": False, "csrfToken": get_token(request)})

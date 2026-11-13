@@ -92,8 +92,14 @@
 .table-container th:first-child { width: 44%; }
 .table-container th:last-child, .table-container td:last-child { white-space: nowrap; }
 .table-container tbody tr:last-child td { border-bottom: 0; }
-.file-name { display: block; margin-bottom: 3px; color: var(--ink); font-weight: 700; }
-.file-reference { display: block; color: var(--muted); font-size: 11px; }
+.file-name { display: block; width: fit-content; min-height: 28px; padding: 3px 0; margin-bottom: 3px; color: var(--ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.file-name:hover { color: var(--blue); }
+.file-results { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 24px; border-top: 1px solid var(--line); }
+.file-results p { margin: 0; color: var(--muted); font-size: 12px; }
+.file-results nav { display: flex; align-items: center; gap: 12px; }
+.file-results nav > span { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.file-results .button { padding: 10px 12px; font-size: 12px; }
+.file-reference { display: block; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
 .status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 5px; background: #edf1f6; color: var(--muted); font-size: 10px; font-weight: 600; white-space: nowrap; }
 .status-badge.waiting { background: var(--warning-soft); color: var(--warning); }
 .status-badge.success { background: var(--success-soft); color: var(--success); }
@@ -108,7 +114,6 @@
 .getting-started { padding: 1px 0 0; }
 .getting-started > .section-heading { padding: 5px 0 18px; }
 .getting-started h2 { font-size: 16px; }
-.step-count { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .setup-steps { display: grid; gap: 20px; padding: 0; margin: 0 0 22px; list-style: none; }
 .setup-steps > li { display: flex; align-items: flex-start; gap: 12px; }
 .step-number { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 27px; height: 27px; border: 1px solid #c7d4e4; border-radius: 50%; color: var(--muted); font-size: 11px; font-weight: 700; }

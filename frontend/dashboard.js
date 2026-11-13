@@ -21,10 +21,8 @@ class WorkspaceDashboard {
 
   constructor(data) {
     this.client = new SessionClient();
-    this.files = new Map((data.files || []).map(file => [file.id, {
-      ...file,
-      searchText: [file.clientName, file.title, file.reference].filter(Boolean).join(' ').toLocaleLowerCase(),
-    }]));
+    this.files = new Map();
+    this.dateFormatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     this.filter = 'all';
     this.search = document.querySelector('#file-search');
     this.sort = document.querySelector('#file-sort');
@@ -32,14 +30,17 @@ class WorkspaceDashboard {
     this.menu = document.querySelector('.menu-toggle');
     this.mobile = window.matchMedia('(max-width: 800px)');
     this.error = document.querySelector('#workspace-error');
-    this.pendingSession = false;
+    this.page = 1;
+    this.requestNumber = 0;
+    this.searchTimer = null;
+    this.requestController = null;
+    this.previousPage = document.querySelector('#previous-file-page');
+    this.nextPage = document.querySelector('#next-file-page');
     document.body.classList.add('enhanced');
     this.setMenu(false);
     this.bindEvents();
     this.navigate(window.location.hash.slice(1), false, false);
-    this.renderSummary();
-    this.renderFiles();
-    this.refreshSession();
+    this.applySnapshot(data);
   }
 
   bindEvents() {
@@ -68,9 +69,22 @@ class WorkspaceDashboard {
     });
     window.addEventListener('popstate', () => this.navigate(window.location.hash.slice(1), false));
     window.addEventListener('hashchange', () => this.navigate(window.location.hash.slice(1), false));
-    window.addEventListener('pageshow', event => { if (event.persisted) this.refreshSession(); });
-    this.search.addEventListener('input', () => this.renderFiles());
-    this.sort.addEventListener('change', () => this.renderFiles());
+    window.addEventListener('pageshow', event => { if (event.persisted) this.refreshWorkspace(); });
+    window.addEventListener('pagehide', () => {
+      window.clearTimeout(this.searchTimer);
+      this.requestController?.abort();
+    });
+    this.search.addEventListener('input', () => {
+      this.page = 1;
+      this.requestNumber++;
+      this.requestController?.abort();
+      window.clearTimeout(this.searchTimer);
+      this.searchTimer = window.setTimeout(() => this.refreshWorkspace(), 250);
+    });
+    this.sort.addEventListener('change', () => {
+      this.page = 1;
+      this.refreshWorkspace();
+    });
     this.menu.addEventListener('click', () => this.setMenu(this.menu.getAttribute('aria-expanded') !== 'true'));
     this.mobile.addEventListener('change', () => this.setMenu(false));
     document.addEventListener('keydown', event => {
@@ -89,7 +103,15 @@ class WorkspaceDashboard {
       this.setFilter('all');
       this.search.focus();
     });
-    document.querySelector('#retry-session').addEventListener('click', () => this.refreshSession());
+    document.querySelector('#retry-session').addEventListener('click', () => this.refreshWorkspace());
+    this.previousPage.addEventListener('click', () => {
+      this.page--;
+      this.refreshWorkspace();
+    });
+    this.nextPage.addEventListener('click', () => {
+      this.page++;
+      this.refreshWorkspace();
+    });
     document.querySelector('.logout-button').addEventListener('click', () => this.logout());
   }
 
@@ -122,30 +144,33 @@ class WorkspaceDashboard {
     this.menu.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
   }
 
-  matchesFilter(file, filter) {
-    if (filter === 'waiting') return file.status === 'awaiting_client' || file.status === 'awaiting_company';
-    if (filter === 'ready') return file.status === 'completed';
-    if (filter === 'attention') return file.needsAttention === true || file.status === 'draft' || file.status === 'expired';
-    return true;
+  applySnapshot(data) {
+    if (data.companyId !== document.body.dataset.companyId) {
+      window.location.reload();
+      return;
+    }
+    // Keep only the current page and four recent records in browser memory.
+    this.files.clear();
+    for (const file of data.files) this.files.set(file.id, file);
+    this.recentFiles = data.recentFiles;
+    this.counts = data.counts;
+    this.pagination = data.pagination;
+    this.page = data.pagination.number;
+    this.renderSummary();
+    this.renderFiles();
   }
 
   setFilter(filter) {
     this.filter = filter;
+    this.page = 1;
     document.querySelectorAll('[data-filter]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.filter === filter)));
-    this.renderFiles();
+    this.refreshWorkspace();
   }
 
   renderSummary() {
-    const counts = { all: this.files.size, waiting: 0, ready: 0, attention: 0 };
-    for (const file of this.files.values()) {
-      for (const filter of ['waiting', 'ready', 'attention']) {
-        if (this.matchesFilter(file, filter)) counts[filter]++;
-      }
-    }
-    document.querySelectorAll('[data-count]').forEach(element => { element.textContent = counts[element.dataset.count]; });
-    const recent = [...this.files.values()].sort((first, second) => this.timestamp(second) - this.timestamp(first)).slice(0, 4);
-    this.renderRows(document.querySelector('#recent-file-rows'), recent);
-    document.querySelector('#recent-empty').hidden = recent.length > 0;
+    document.querySelectorAll('[data-count]').forEach(element => { element.textContent = this.counts[element.dataset.count]; });
+    this.renderRows(document.querySelector('#recent-file-rows'), this.recentFiles);
+    document.querySelector('#recent-empty').hidden = this.recentFiles.length > 0;
   }
 
   timestamp(file) {
@@ -153,21 +178,25 @@ class WorkspaceDashboard {
   }
 
   renderFiles() {
-    const query = this.search.value.trim().toLocaleLowerCase();
-    const filtered = [...this.files.values()].filter(file => this.matchesFilter(file, this.filter) && file.searchText.includes(query));
-    filtered.sort((first, second) => this.sort.value === 'name'
-      ? String(first.clientName || '').localeCompare(String(second.clientName || ''))
-      : (this.timestamp(first) - this.timestamp(second)) * (this.sort.value === 'oldest' ? 1 : -1));
-    this.renderRows(document.querySelector('#all-file-rows'), filtered);
+    const query = this.search.value.trim();
+    this.renderRows(document.querySelector('#all-file-rows'), this.files.values());
     const noMatches = Boolean(query) || this.filter !== 'all';
-    document.querySelector('#files-empty').hidden = filtered.length > 0;
+    document.querySelector('#files-empty').hidden = this.files.size > 0;
     document.querySelector('#files-empty-title').textContent = noMatches ? 'No matching client files.' : 'Your next client starts here.';
     document.querySelector('#files-empty-copy').textContent = noMatches
       ? 'Try another client name or reference, or clear your filters to see every file.'
-      : 'Once client files are created, you can search them and follow every signing stage here.';
+      : 'Create a client file to save client details and return to its setup later.';
     document.querySelector('#reset-filters').hidden = !noMatches;
     document.querySelector('#files-template-link').hidden = noMatches;
-    document.querySelector('#workspace-status').textContent = `${filtered.length} client ${filtered.length === 1 ? 'file' : 'files'} shown.`;
+    const { number, pages, total, pageSize, hasPrevious, hasNext } = this.pagination;
+    const start = total ? (number - 1) * pageSize + 1 : 0;
+    const message = total ? `${start}–${start + this.files.size - 1} of ${total} client ${total === 1 ? 'file' : 'files'}` : 'No client files shown.';
+    document.querySelector('#file-results-summary').textContent = message;
+    document.querySelector('#file-pagination').hidden = pages <= 1;
+    document.querySelector('#file-page-label').textContent = `Page ${number} of ${pages}`;
+    this.previousPage.disabled = !hasPrevious;
+    this.nextPage.disabled = !hasNext;
+    document.querySelector('#workspace-status').textContent = message;
   }
 
   renderRows(container, files) {
@@ -175,8 +204,9 @@ class WorkspaceDashboard {
     for (const file of files) {
       const row = document.createElement('tr');
       const nameCell = row.insertCell();
-      const name = document.createElement('strong');
+      const name = document.createElement('a');
       name.className = 'file-name';
+      name.href = file.detailUrl;
       name.textContent = file.clientName || 'Client';
       const reference = document.createElement('span');
       reference.className = 'file-reference';
@@ -188,7 +218,7 @@ class WorkspaceDashboard {
       badge.textContent = file.needsAttention ? `${state.label} · needs attention` : state.label;
       row.insertCell().append(badge);
       const updated = row.insertCell();
-      updated.textContent = this.timestamp(file) ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(file.updatedAt)) : '—';
+      updated.textContent = this.timestamp(file) ? this.dateFormatter.format(new Date(file.updatedAt)) : '—';
       fragment.append(row);
     }
     container.replaceChildren(fragment);
@@ -200,25 +230,38 @@ class WorkspaceDashboard {
     this.error.hidden = false;
   }
 
-  async refreshSession() {
-    if (this.pendingSession) return;
-    this.pendingSession = true;
+  async refreshWorkspace() {
+    window.clearTimeout(this.searchTimer);
+    this.requestController?.abort();
+    const controller = new AbortController();
+    this.requestController = controller;
+    const requestNumber = ++this.requestNumber;
     this.error.hidden = true;
     document.body.classList.add('is-loading');
     document.querySelectorAll('.table-container').forEach(table => table.setAttribute('aria-busy', 'true'));
     const retry = document.querySelector('#retry-session');
     retry.disabled = true;
+    this.previousPage.disabled = true;
+    this.nextPage.disabled = true;
+    document.querySelector('#file-results-summary').textContent = 'Updating client files…';
     try {
-      await this.client.request(document.body.dataset.sessionUrl);
-      document.querySelector('#workspace-status').textContent = 'Your workspace is ready.';
+      const url = new URL(document.body.dataset.filesUrl, window.location.origin);
+      url.search = new URLSearchParams({ q: this.search.value.trim(), filter: this.filter, sort: this.sort.value, page: this.page, workspace_id: document.body.dataset.companyId });
+      const data = await this.client.request(url, undefined, { signal: controller.signal });
+      if (requestNumber === this.requestNumber) this.applySnapshot(data);
     } catch (error) {
+      if (error.name === 'AbortError' || requestNumber !== this.requestNumber) return;
       if (error.status === 401) return window.location.replace(document.body.dataset.loginUrl);
-      this.showError('We couldn’t refresh your workspace.', error.message);
+      if (error.code === 'workspace_changed') return window.location.reload();
+      this.showError('We couldn’t load client files.', error.message);
+      document.querySelector('#file-results-summary').textContent = 'Files could not be updated. Try again to load the current results.';
     } finally {
-      this.pendingSession = false;
-      retry.disabled = false;
-      document.body.classList.remove('is-loading');
-      document.querySelectorAll('.table-container').forEach(table => table.setAttribute('aria-busy', 'false'));
+      if (requestNumber === this.requestNumber) {
+        this.requestController = null;
+        retry.disabled = false;
+        document.body.classList.remove('is-loading');
+        document.querySelectorAll('.table-container').forEach(table => table.setAttribute('aria-busy', 'false'));
+      }
     }
   }
 

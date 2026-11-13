@@ -39,7 +39,10 @@
           <p id="form-description">Log in to your company workspace.</p>
         </div>
 
-        <form id="access-form" novalidate>
+        <form id="access-form" method="post" novalidate>
+          <noscript>
+            <p class="field-hint">JavaScript is required to sign in. Enable it and reload this page.</p>
+          </noscript>
           <div class="field" id="email-field">
             <label for="email">Work email</label>
             <div class="input-wrap">

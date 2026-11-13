@@ -10,6 +10,29 @@ from django.utils import timezone
 from .models import ClientInvitation
 
 
+def company_authenticated(request):
+    return request.user.is_authenticated and not request.session.get("client_invitation")
+
+
+def company_context(request):
+    account = request.user
+    account_name = account.get_short_name() or "Your account"
+    company_name = account.company_name or "Company workspace"
+    return {
+        "company_id": str(account.pk),
+        "company_name": company_name,
+        "company_initial": company_name[:1].upper(),
+        "account_name": account_name,
+        "account_initial": account_name[:1].upper(),
+        "account_email": account.email,
+        "session_url": reverse("company_session"),
+        "logout_url": reverse("company_logout"),
+        "login_url": reverse("company_login"),
+        "dashboard_url": reverse("company_dashboard"),
+        "static_prefix": settings.STATIC_URL,
+    }
+
+
 def read_json(request):
     if request.content_type != "application/json" or len(request.body) > 8192:
         raise ValueError("Send a valid JSON request.")
@@ -42,6 +65,7 @@ def auth_result(request, role):
         "message": "You’re logged in.",
         "dashboardUrl": reverse("company_dashboard") if role == "company" else None,
         "csrfToken": get_token(request),
+        **({"companyId": str(request.user.pk)} if role == "company" else {}),
     })
     response["Cache-Control"] = "no-store"
     return response

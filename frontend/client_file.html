@@ -1,0 +1,71 @@
+{% extends "shared/base.html" %}
+{% block title %}{% if is_new %}New client file{% else %}{{ draft_data.clientName }}{% endif %} · Astra{% endblock %}
+{% block resources %}
+  <link rel="stylesheet" href="{{ static_prefix }}client_file.css">
+  <script type="module" src="{{ static_prefix }}client_file.js"></script>
+{% endblock %}
+{% block body_attributes %}class="draft-editor" data-save-url="{{ save_url }}" data-session-url="{{ session_url }}" data-login-url="{{ login_url }}" data-company-id="{{ company_id }}"{% endblock %}
+{% block content %}
+  <a class="draft-skip-link" href="#draft-main">Skip to client file</a>
+  <header class="draft-header">
+    <a class="brand" href="{{ dashboard_url }}" aria-label="Astra workspace"><svg aria-hidden="true"><use href="#astra-mark"/></svg>astra<span class="brand-dot">.</span></a>
+    <div class="draft-company"><span class="draft-company-avatar" aria-hidden="true">{{ company_initial }}</span><div><strong>{{ company_name }}</strong><span>Company workspace</span></div></div>
+  </header>
+
+  <main class="draft-main" id="draft-main" tabindex="-1">
+    <a class="draft-back-link" href="{{ dashboard_url }}#files"><svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg>Back to client files</a>
+    <div class="draft-heading"><div><h1 id="draft-title">{% if is_new %}New client file{% else %}{{ draft_data.clientName }}{% endif %}</h1><p>Keep the details for this job or case together. You can finish signer setup later.</p></div><span class="draft-badge">Draft · needs setup</span></div>
+
+    <noscript><p class="draft-alert">Enable JavaScript to save this client file. Your company workspace remains available through the back link.</p></noscript>
+    <div class="draft-alert" id="draft-session-error" role="alert" hidden><div><strong>We couldn’t check your session.</strong><p id="draft-session-error-message"></p><a href="{{ login_url }}" target="_blank" rel="noopener">Sign in in a new tab</a></div><button class="button secondary" type="button" id="retry-session">Try again</button></div>
+
+    <div class="draft-layout">
+      <form class="draft-form" id="draft-form" novalidate aria-busy="true">
+        <fieldset class="draft-fields" id="draft-fields" disabled>
+          <legend class="sr-only">Client-file details</legend>
+          <section class="draft-section" aria-labelledby="file-details-heading">
+            <h2 id="file-details-heading">File details</h2>
+            <p class="draft-section-copy">A reference helps you find this file in your workspace.</p>
+            <div class="draft-field-grid">
+              <div class="field"><label for="reference">File reference <span class="required-label">Required</span></label><div class="input-wrap"><input id="reference" name="reference" type="text" value="{{ draft_data.reference }}" maxlength="128" required autocomplete="off" aria-describedby="reference-hint reference-error"></div><p class="field-hint" id="reference-hint">Use a reference unique to this company.</p><p class="field-error" id="reference-error" hidden></p></div>
+              <div class="field"><label for="title">File title <span class="optional-label">Optional</span></label><div class="input-wrap"><input id="title" name="title" type="text" value="{{ draft_data.title }}" maxlength="200" autocomplete="off" aria-describedby="title-error"></div><p class="field-error" id="title-error" hidden></p></div>
+            </div>
+          </section>
+
+          <section class="draft-section" aria-labelledby="client-details-heading">
+            <h2 id="client-details-heading">Client details</h2>
+            <div class="draft-field-grid">
+              <div class="field"><label for="client_name">Client name <span class="required-label">Required</span></label><div class="input-wrap"><input id="client_name" name="client_name" type="text" value="{{ draft_data.clientName }}" maxlength="200" required autocomplete="off" aria-describedby="client_name-error"></div><p class="field-error" id="client_name-error" hidden></p></div>
+              <div class="field"><label for="client_email">Client email <span class="optional-label">Optional</span></label><div class="input-wrap"><input id="client_email" name="client_email" type="email" value="{{ draft_data.clientEmail }}" maxlength="254" autocomplete="off" inputmode="email" spellcheck="false" aria-describedby="client_email-error"></div><p class="field-error" id="client_email-error" hidden></p></div>
+            </div>
+          </section>
+
+          <section class="draft-section" aria-labelledby="signer-details-heading">
+            <h2 id="signer-details-heading">Signer details <span class="optional-label">Optional for a draft</span></h2>
+            <p class="draft-section-copy">Add the person who will sign for the client when you know their details.</p>
+            <div class="draft-field-grid">
+              <div class="field"><label for="signer_name">Signer name</label><div class="input-wrap"><input id="signer_name" name="signer_name" type="text" value="{{ draft_data.signerName }}" maxlength="200" autocomplete="off" aria-describedby="signer_name-error"></div><p class="field-error" id="signer_name-error" hidden></p></div>
+              <div class="field"><label for="signer_email">Signer email</label><div class="input-wrap"><input id="signer_email" name="signer_email" type="email" value="{{ draft_data.signerEmail }}" maxlength="254" autocomplete="off" inputmode="email" spellcheck="false" aria-describedby="signer_email-error"></div><p class="field-error" id="signer_email-error" hidden></p></div>
+            </div>
+          </section>
+        </fieldset>
+
+        <div class="draft-save-area">
+          <p class="draft-save-error" id="draft-save-error" role="alert" hidden></p>
+          <p class="draft-save-status" id="draft-save-status" role="status" aria-live="polite" hidden></p>
+          <div class="draft-save-row"><div><p id="draft-saved-at">{% if is_new %}Not saved yet{% else %}Saved draft{% endif %}</p><p class="draft-unsaved" id="draft-unsaved" hidden>You have unsaved changes.</p></div><button class="button" id="save-draft" type="submit" disabled><span id="save-draft-label">Checking session…</span><svg class="icon" aria-hidden="true"><use href="#icon-check"/></svg></button></div>
+        </div>
+      </form>
+
+      <aside class="draft-guidance" aria-labelledby="draft-guidance-heading">
+        <svg class="icon" aria-hidden="true"><use href="#icon-folder"/></svg>
+        <h2 id="draft-guidance-heading">A place to begin.</h2>
+        <p>Save the details now, then return to this file from your company’s dashboard.</p>
+        <div class="draft-safety-note"><svg class="icon" aria-hidden="true"><use href="#icon-shield"/></svg><p><strong>No signing request is created when you save.</strong> This file stays a draft until agreement setup is complete and a separate request is issued.</p></div>
+        <p class="draft-next-step">Agreement uploads, template selection, and signing will be added in the next stages.</p>
+      </aside>
+    </div>
+    <footer class="draft-footer">Astra agreement portal</footer>
+  </main>
+  {{ draft_data|json_script:"draft-data" }}
+{% endblock %}

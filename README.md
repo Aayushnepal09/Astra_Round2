@@ -8,7 +8,9 @@ Run `python backend/manage.py runserver` in the existing virtual environment, th
 
 All interface code is in `frontend/`. Login and dashboard each have one HTML, CSS, and JavaScript file. Shared templates, theme, controls, session helpers, and assets are in `frontend/shared/`.
 
-The dashboard currently includes responsive overview, client-file, agreement-template, and guidance views, plus search, filters, and logout. File creation, uploads, and signing are not connected yet; unavailable actions are labelled and no signing records are fabricated. No new frontend dependencies are required.
+Company staff can create, save, reopen, and update client-file drafts. Drafts are stored in the database and scoped to the signed-in company account. The dashboard includes company-wide counts, search, status filters, sorting, and paginated file lists. Saving a draft does not create a signing request or invitation.
+
+Run `python backend/manage.py migrate` after pulling database changes. Local development uses the SQLite database in `backend/.local/`; deployment requires persistent database storage. Agreement uploads, field preparation, and signing are not connected yet. No new frontend dependencies are required.
 
 ## Company workflow
 
