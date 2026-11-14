@@ -34,6 +34,7 @@ class ClientFile(models.Model):
     )
     company_signer_name = models.CharField(max_length=200, blank=True)
     company_signer_email = models.EmailField(blank=True)
+    preparation_values = models.JSONField(default=dict, blank=True)
     status = models.CharField(
         max_length=24,
         choices=Status.choices,
@@ -110,6 +111,7 @@ class SigningRequest(models.Model):
     template_version = models.ForeignKey("agreements.TemplateVersion", on_delete=models.PROTECT)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField(null=True, blank=True)
+    preparation_values = models.JSONField(default=dict, blank=True)
 
     @property
     def status(self):

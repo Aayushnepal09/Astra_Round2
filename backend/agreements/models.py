@@ -266,6 +266,7 @@ class AgreementField(models.Model):
     class Role(models.TextChoices):
         CLIENT = "client", "Client"
         COMPANY = "company", "Company"
+        PREPARATION = "preparation", "Company preparation"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     agreement = models.ForeignKey(
@@ -278,7 +279,7 @@ class AgreementField(models.Model):
     field_type = models.CharField(max_length=20, choices=FieldType.choices)
     label = models.CharField(max_length=120, blank=True)
     required = models.BooleanField(default=False)
-    role = models.CharField(max_length=8, choices=Role.choices)
+    role = models.CharField(max_length=16, choices=Role.choices)
     page_number = models.PositiveIntegerField()
     x = models.FloatField()
     y = models.FloatField()
@@ -293,6 +294,11 @@ class AgreementField(models.Model):
             models.CheckConstraint(
                 condition=models.Q(page_number__gt=0),
                 name="agreement_field_positive_page",
+            ),
+            models.CheckConstraint(
+                condition=(~models.Q(role="preparation")
+                           | models.Q(field_type__in=("text", "name", "date"))),
+                name="agreement_preparation_type",
             ),
             models.CheckConstraint(
                 condition=(
@@ -313,6 +319,10 @@ class AgreementField(models.Model):
         super().clean()
         errors = {}
         self.label = self.label.strip() if isinstance(self.label, str) else self.label
+        if self.role == self.Role.PREPARATION and self.field_type not in (
+            self.FieldType.TEXT, self.FieldType.NAME, self.FieldType.DATE,
+        ):
+            errors["role"] = "Company preparation supports only text, name and date fields."
         if self.agreement_id:
             agreement = self.agreement
             if agreement.processing_state != Agreement.ProcessingState.READY:
