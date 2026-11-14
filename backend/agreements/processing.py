@@ -28,6 +28,9 @@ class PdfProcessor:
         "page_not_found": "This page does not exist. Choose another page.",
         "resource_limit": "This PDF needs more processing resources than are available. Export a simpler PDF and try again.",
         "processing_failed": "The PDF could not be processed. Please try again or export a fresh PDF.",
+        "field_overflow": "An accepted value cannot fit legibly in its configured field. This request remains pending and needs a corrected agreement layout; retrying unchanged will not fix it.",
+        "font_unavailable": "The completion font is unavailable. Configure an installed TrueType font, then retry finalization.",
+        "unsupported_glyph": "The completion font cannot render an accepted value faithfully. Configure a suitable font before retrying; accepted values were preserved.",
     }
 
     def validate(self, path):
@@ -46,16 +49,23 @@ class PdfProcessor:
             raise DocumentError(self.errors["processing_failed"])
         return result
 
-    def _run(self, operation, path, page_number=0):
+    def complete(self, path, fields):
+        result = self._run("complete", path, fields=fields)
+        if not result.startswith(b"%PDF-") or len(result) > settings.AGREEMENT_MAX_BYTES:
+            raise DocumentError(self.errors["processing_failed"])
+        return result
+
+    def _run(self, operation, path, page_number=0, fields=None):
         command = [
             sys.executable, "-I", str(Path(__file__).with_name("pdf_worker.py")),
             operation, str(Path(path).resolve()), str(settings.AGREEMENT_MAX_BYTES),
             str(settings.AGREEMENT_MAX_PAGES), str(settings.AGREEMENT_PREVIEW_MAX_EDGE),
             str(page_number), str(settings.AGREEMENT_PROCESSING_MAX_MEMORY),
+            str(getattr(settings, "AGREEMENT_COMPLETION_FONT", "")),
         ]
         try:
             result = subprocess.run(
-                command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                command, input=json.dumps(fields).encode("utf-8") if fields is not None else b"", stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL, timeout=settings.AGREEMENT_PROCESSING_TIMEOUT,
                 check=False,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),

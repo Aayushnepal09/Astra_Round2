@@ -106,6 +106,67 @@ class PrivateDocumentStorage:
     def open(self, key):
         return self._path(key).open("rb")
 
+    def inspect(self, key, *, max_bytes):
+        digest, size = hashlib.sha256(), 0
+        with self.open(key) as source:
+            for chunk in iter(lambda: source.read(64 * 1024), b""):
+                size += len(chunk)
+                if size > max_bytes:
+                    raise ValueError("The private artifact exceeds its byte limit.")
+                digest.update(chunk)
+        if not size:
+            raise ValueError("The private artifact is empty.")
+        return StoredArtifact(key, digest.hexdigest(), size)
+
+    def write_once(self, key, chunks, *, max_bytes):
+        """Publish a reserved artifact atomically; recover it after an interrupted DB save.
+
+        The caller must serialize retries using its request's database lock.
+        """
+        path = self._path(key)
+        if path.exists():
+            return self.inspect(key, max_bytes=max_bytes)
+        # Create/check the same private directory hierarchy as ordinary writes.
+        directory = self.root
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        for part in self.prefix.split("/"):
+            directory /= part
+            if directory.resolve() != directory:
+                raise SuspiciousFileOperation("Private artifact paths cannot use symbolic links.")
+            directory.mkdir(exist_ok=True, mode=0o700)
+        staging = path.with_suffix(".tmp")
+        if staging.resolve() != staging:
+            raise SuspiciousFileOperation("Private staging paths cannot use symbolic links.")
+        size = 0
+        try:
+            descriptor = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_BINARY", 0), 0o600)
+            with os.fdopen(descriptor, "wb") as destination:
+                for chunk in chunks:
+                    if not isinstance(chunk, bytes):
+                        raise ValueError("Artifact chunks must be bytes.")
+                    size += len(chunk)
+                    if size > max_bytes:
+                        raise ValueError("The completed PDF exceeds the artifact size limit.")
+                    destination.write(chunk)
+                if not size:
+                    raise ValueError("The completed PDF is empty.")
+                destination.flush()
+                os.fsync(destination.fileno())
+            # A hard link publishes the entire file and never replaces an existing artifact.
+            try:
+                os.link(staging, path)
+            except FileExistsError:
+                pass
+        finally:
+            staging.unlink(missing_ok=True)
+        if os.name != "nt":
+            descriptor = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+        return self.inspect(key, max_bytes=max_bytes)
+
     def delete(self, key):
         """Remove only an artifact in this agreement's private namespace."""
         self._path(key).unlink(missing_ok=True)

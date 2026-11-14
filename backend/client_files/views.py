@@ -2,7 +2,7 @@ import uuid
 
 from django.core.exceptions import RequestDataTooBig, SuspiciousFileOperation, ValidationError
 from django.db import DatabaseError, IntegrityError, transaction
-from django.http import HttpResponseNotFound, JsonResponse
+from django.http import FileResponse, HttpResponseNotFound, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views import View
@@ -14,6 +14,8 @@ from .forms import ClientFileDraftForm
 from .models import ClientFile, SigningRecipient, SigningRequest
 from .signing import DemoRequestIssuer
 from .workspace import CompanyFileWorkspace
+from .finalization import AgreementFinalizer
+from .submissions import SigningError
 
 
 class CompanyFileAccessMixin:
@@ -188,3 +190,49 @@ class CompanyFileRequest(CompanyFileAccessMixin, View):
             return auth_error("Code generation is temporarily locked. Wait and retry; the same request will be used.", status=429)
         except (DatabaseError, OSError, SuspiciousFileOperation):
             return auth_error("Couldn’t confirm the invitation. Retry to recover the same request.", status=503)
+
+
+class CompanyFileFinalize(CompanyFileAccessMixin, View):
+    json_response = True
+
+    def post(self, request, file_id):
+        try:
+            payload = read_json(request)
+            if payload != {"workspace_id": str(request.user.pk)}:
+                return auth_error("Your workspace changed or the request options are invalid. Reopen this file.", status=409)
+            result = AgreementFinalizer(request.user.pk).run(file_id)
+            return JsonResponse({"finalization": result})
+        except SigningError as error:
+            return auth_error(str(error), status=error.status)
+        except (ValueError, RequestDataTooBig):
+            return auth_error("Send a valid finalization request.")
+        except ValidationError:
+            return auth_error("The issued agreement or accepted submissions could not be validated. The file remains pending.", status=422)
+        except DatabaseError:
+            return auth_error("Couldn’t confirm finalization. Refresh status, then retry; signatures are preserved.", status=503)
+
+
+class CompanyCompletedArtifact(CompanyFileAccessMixin, View):
+    json_response = True
+    history = False
+
+    def get(self, request, file_id):
+        try:
+            completion, handle = AgreementFinalizer(request.user.pk).open_completed(file_id)
+            if self.history:
+                handle.close()
+                response = JsonResponse(completion.history, json_dumps_params={"indent": 2})
+                if request.GET.get("download") == "1":
+                    response["Content-Disposition"] = 'attachment; filename="signing-history.json"'
+            else:
+                response = FileResponse(handle, content_type="application/pdf", filename="completed-agreement.pdf",
+                                        as_attachment=request.GET.get("download") == "1")
+            response["X-Content-Type-Options"] = "nosniff"
+            response["Content-Security-Policy"] = "sandbox"
+            return response
+        except SigningError as error:
+            return auth_error(str(error), status=error.status)
+        except (DatabaseError, OSError, SuspiciousFileOperation):
+            return auth_error("The completed artifact is temporarily unavailable. Retry from the client file.", status=503)
+        except ValidationError:
+            return auth_error("The completion record does not match this client file. Contact the company.", status=409)

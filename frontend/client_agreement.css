@@ -26,5 +26,9 @@
 .review-sheet { position: relative; width: 100%; }
 .review-field-marker { position: absolute; border: 1px solid var(--blue); background: rgb(47 101 185 / 12%); color: var(--ink); font-size: 11px; line-height: 1.4; overflow: hidden; pointer-events: none; }
 .signing-form input[aria-invalid="true"], .signing-form textarea[aria-invalid="true"] { outline: 2px solid var(--error); outline-offset: 2px; }
+.client-submitted-values { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
+.client-submitted-values h2 { font-size: 20px; }
+.client-submitted-values dt { margin-top: 20px; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.client-submitted-values dd { margin: 6px 0 0; font-size: 14px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 850px) { .signing-layout { grid-template-columns: minmax(0, 1fr); } .review-viewport { max-height: 65vh; } }
 @media (max-width: 480px) { .signing-form { padding: 20px; } .signing-actions .button { flex: 1 1 100%; } }

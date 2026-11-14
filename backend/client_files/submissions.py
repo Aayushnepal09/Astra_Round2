@@ -4,10 +4,14 @@ import re
 import uuid
 from datetime import date
 
+from django.conf import settings
+from django.core.exceptions import SuspiciousFileOperation
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 
+from agreements.processing import DocumentError, PdfProcessor
+from agreements.storage import PrivateDocumentStorage
 from login.common import client_identity
 from .models import ClientFile, SigningDraft, SigningSubmission
 from .signing import signing_recipient
@@ -90,6 +94,41 @@ class ClientSigning:
             raise SigningError("Check the highlighted fields. Your entered values are still here.", fields=errors)
         return values
 
+    @staticmethod
+    def preflight(recipient, values):
+        issued = recipient.signing_request
+        version, agreement = issued.template_version, issued.template_version.agreement
+        if version.pdf_sha256 != agreement.pdf_sha256:
+            raise SigningError("The issued source PDF does not match this agreement. Contact the company; your entries are still here.", status=409)
+        combined = dict(values)
+        if recipient.role == "company":
+            client = SigningSubmission.objects.get(signing_request=issued, recipient__role="client")
+            client.full_clean()
+            if client.template_version_id != version.pk or client.pdf_sha256 != version.pdf_sha256:
+                raise SigningError("The accepted client submission does not match this agreement. Contact the company; your entries are still here.", status=409)
+            combined.update(client.values)
+        fields = [
+            {**field, "value": combined.get(field["id"], False if field["type"] == "acknowledgement" else "")}
+            for field in version.fields
+        ]
+        storage = PrivateDocumentStorage(issued.client_file.company_id, agreement.pk)
+        try:
+            source = storage.inspect(agreement.pdf_key, max_bytes=settings.AGREEMENT_MAX_BYTES)
+            if source.sha256 != version.pdf_sha256 or source.size_bytes != agreement.pdf_size_bytes:
+                raise SigningError("The published source PDF failed its integrity check. Contact the company; your entries are still here.", status=409)
+            with storage.open(source.key) as handle:
+                # Exercise the final renderer without storing an artifact or accepting consent.
+                PdfProcessor().complete(handle.name, fields)
+        except DocumentError as error:
+            messages = {
+                "field_overflow": "An entered value cannot fit legibly in its field. Shorten editable text and retry; if your required signer name cannot fit, contact the company about the layout.",
+                "unsupported_glyph": "An entered value contains characters the PDF renderer cannot reproduce. Correct editable text and retry; if your required signer name is affected, contact the company about rendering support.",
+            }
+            message = messages.get(error.code, "The PDF rendering check could not finish. Retry signing; if this continues, contact the company.")
+            raise SigningError(f"{message} No new signature was accepted. Your entries are still here.", status=422 if error.code in messages else 503, code=error.code) from error
+        except (OSError, ValueError, SuspiciousFileOperation) as error:
+            raise SigningError("The issued PDF could not be checked. Retry or contact the company. No new signature was accepted; your entries are still here.", status=503, code="preflight_unavailable") from error
+
     @classmethod
     @transaction.atomic
     def act(cls, request, recipient, payload):
@@ -139,6 +178,7 @@ class ClientSigning:
         if action == "save":
             SigningDraft.objects.update_or_create(recipient=recipient, defaults={"values": values, "revision": revision + 1})
         else:
+            cls.preflight(recipient, values)
             if client_identity(request, touch=False) is None or (issued.expires_at and issued.expires_at <= timezone.now()):
                 raise SigningError("Your access or request has expired. Verify access again before retrying.", status=401, code="access_expired")
             SigningSubmission.objects.create(

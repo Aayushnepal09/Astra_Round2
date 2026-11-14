@@ -234,7 +234,9 @@ class SigningController {
     this.review.clearImage();
     document.querySelector('#review-field-markers').replaceChildren();
     document.querySelector('#signing-reverify').hidden = false;
-    this.status.textContent = 'Access expired. Your entries remain in this tab. Verify access in a new tab, then check submission status here.';
+    this.status.textContent = this.state.role === 'company'
+      ? 'Company access is unavailable. Your entries remain in this tab. Sign in to this workspace in a new tab, then check submission status here.'
+      : 'Access expired. Your entries remain in this tab. Verify access in a new tab, then check submission status here.';
     this.update();
   }
 
@@ -318,14 +320,18 @@ class SigningController {
     this.setValues(state.values);
     this.consent.checked = true;
     document.querySelector('#signing-confirmation').hidden = false;
-    document.querySelector('#confirmation-copy').textContent = state.progress === 'awaiting_company'
+    document.querySelector('#confirmation-copy').textContent = state.progress === 'completed'
+      ? 'All required signatures, the completed PDF and signing history are saved. The company can access the final artifacts from the client file.'
+      : state.role === 'company'
+      ? 'Your company countersignature is recorded. All required signatures are recorded; final-document generation is pending. This file is not complete.'
+      : state.progress === 'awaiting_company'
       ? 'Your client signature is recorded. A company countersignature is still required. This file is not complete.'
       : 'Your client signature is recorded. Final-document generation is pending. This file is not complete.';
     document.querySelector('#confirmation-time').textContent = `Recorded for ${state.receipt.signerName} at ${new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'long' }).format(Date.parse(state.receipt.submittedAt))}.`;
     document.querySelector('#confirmation-reference').textContent = `Submission reference: ${state.receipt.id}`;
-    document.querySelector('#signing-progress').textContent = state.progress === 'awaiting_company' ? 'Awaiting company' : 'Finalizing';
-    document.querySelector('#signing-notice').textContent = 'Your accepted values are now read-only. You can continue reviewing the agreement during your verified session.';
-    this.status.textContent = 'Submission accepted by the server. No completed PDF is available yet.';
+    document.querySelector('#signing-progress').textContent = state.progress === 'completed' ? 'Completed' : state.progress === 'awaiting_company' ? 'Awaiting company' : 'Finalizing';
+    document.querySelector('#signing-notice').textContent = 'Your accepted values are now read-only. You can continue reviewing the agreement while your access remains authorized.';
+    this.status.textContent = state.progress === 'completed' ? 'Submission accepted. Final artifacts saved.' : 'Submission accepted by the server. Final artifacts are pending; the company can retry finalization from the client file.';
     this.update();
     document.querySelector('#signing-confirmation').focus();
   }

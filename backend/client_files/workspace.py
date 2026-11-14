@@ -8,12 +8,12 @@ from .models import ClientFile
 
 class CompanyFileWorkspace:
     PAGE_SIZE = 25
-    SUMMARY_FIELDS = ("id", "client_name", "title", "reference", "status", "updated_at")
+    SUMMARY_FIELDS = ("id", "client_name", "title", "reference", "status", "updated_at", "signing_request__completion__last_error")
     FILTERS = {
         "all": Q(),
-        "waiting": Q(status__in=("awaiting_client", "awaiting_company")),
+        "waiting": Q(status__in=("awaiting_client", "awaiting_company", "finalizing")),
         "ready": Q(status="completed"),
-        "attention": Q(status__in=("draft", "expired")),
+        "attention": Q(status__in=("draft", "expired")) | Q(status="finalizing", signing_request__completion__last_error__gt=""),
     }
     ORDERINGS = {
         "newest": ("-updated_at", "-id"),
@@ -35,7 +35,7 @@ class CompanyFileWorkspace:
             "status": record["status"],
             "updatedAt": record["updated_at"].isoformat(),
             "detailUrl": reverse("company_file_detail", args=[record["id"]]),
-            "needsAttention": False,
+            "needsAttention": record["status"] == "finalizing" and bool(record["signing_request__completion__last_error"]),
         }
 
     @staticmethod

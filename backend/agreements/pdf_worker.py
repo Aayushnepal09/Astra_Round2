@@ -157,14 +157,22 @@ def process(operation, path, max_bytes, max_pages, edge, page_number):
 def main():
     job = None
     try:
-        operation, filename, byte_limit, page_limit, edge, page_number, memory_limit = sys.argv[1:]
+        operation, filename, byte_limit, page_limit, edge, page_number, memory_limit, font_path = sys.argv[1:]
         job = limit_memory(int(memory_limit))
-        if operation not in ("validate", "render"):
+        if operation not in ("validate", "render", "complete"):
             raise InvalidDocument("processing_failed")
-        result = process(
-            operation, Path(filename), int(byte_limit), int(page_limit),
-            int(edge), int(page_number),
-        )
+        if operation == "complete":
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from completion_worker import complete
+            process("validate", Path(filename), int(byte_limit), int(page_limit), int(edge), 0)
+            result = complete(Path(filename), json.load(sys.stdin), font_path)
+            if len(result) > int(byte_limit):
+                raise InvalidDocument("oversized")
+        else:
+            result = process(
+                operation, Path(filename), int(byte_limit), int(page_limit),
+                int(edge), int(page_number),
+            )
         sys.stdout.buffer.write(result)
     except InvalidDocument as error:
         sys.stdout.write(json.dumps({"error": str(error)}))

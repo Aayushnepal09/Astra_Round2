@@ -38,6 +38,7 @@ class ClientFileEditor {
     this.sendButton = document.querySelector('#send-demo');
     this.invitation = null;
     this.sendButton.addEventListener('click', () => this.requestInvitation());
+    document.querySelector('#finalize-agreement').addEventListener('click', () => this.finalize());
     document.querySelector('#demo-replace').addEventListener('click', () => this.requestInvitation(true));
     document.querySelector('#demo-refresh').addEventListener('click', () => this.loadInvitation());
     for (const kind of ['link', 'code']) document.querySelector(`#demo-copy-${kind}`).addEventListener('click', () => this.copyInvitation(kind));
@@ -70,6 +71,9 @@ class ClientFileEditor {
     this.form.addEventListener('submit', event => this.save(event));
     this.sessionRetry.addEventListener('click', () => this.refreshSession());
     window.addEventListener('pageshow', event => { if (event.persisted) this.refreshSession(); });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && !this.isNew && !this.requestBusy) this.refreshSession();
+    });
     this.refreshSession();
   }
 
@@ -131,6 +135,7 @@ class ClientFileEditor {
     this.sendButton.setAttribute('aria-busy', String(this.requestBusy));
     document.querySelector('#demo-replace').disabled = busy || !this.sessionReady;
     document.querySelector('#demo-refresh').disabled = busy || !this.sessionReady;
+    document.querySelector('#finalize-agreement').disabled = busy || !this.sessionReady;
     this.buttonLabel.textContent = this.saving ? 'Saving…' : this.checkingSession ? 'Checking session…' : 'Save draft';
     this.button.setAttribute('aria-busy', String(busy));
     this.form.setAttribute('aria-busy', String(busy));
@@ -203,6 +208,8 @@ class ClientFileEditor {
     this.sessionReady = false;
     this.invitation = null;
     document.querySelector('#demo-invitation').hidden = true;
+    document.querySelector('#company-countersign').hidden = true;
+    document.querySelector('#file-completion').hidden = true;
     document.querySelector('#demo-code').value = '';
     document.querySelector('#draft-session-error-message').textContent = message;
     this.sessionError.hidden = false;
@@ -393,9 +400,16 @@ class ClientFileEditor {
   renderInvitation(invitation) {
     this.invitation = invitation;
     document.querySelector('#demo-invitation').hidden = !invitation;
+    const countersign = document.querySelector('#company-countersign');
+    countersign.hidden = !invitation?.companySigningUrl;
+    if (invitation?.companySigningUrl) {
+      countersign.href = invitation.companySigningUrl;
+      countersign.textContent = ['finalizing', 'completed'].includes(invitation.progress) ? 'Review recorded company submission' : 'Review & countersign';
+    }
     if (!invitation) return;
     this.issued = true;
-    document.querySelector('#file-status').textContent = ({ awaiting_company: 'Awaiting company', finalizing: 'Finalizing' })[invitation.progress] || 'Awaiting client';
+    document.querySelector('#file-status').textContent = ({ awaiting_company: 'Awaiting company', finalizing: 'Finalizing', completed: 'Ready to start' })[invitation.progress] || 'Awaiting client';
+    this.renderCompletion(invitation.finalization);
     document.querySelector('#demo-send-hint').textContent = 'Request issued. The selected agreement and recipients are fixed. Repeating Send recovers this same request.';
     this.renderTemplateSetup();
     document.querySelector('#demo-link').value = new URL(invitation.link, location.origin).href;
@@ -411,11 +425,53 @@ class ClientFileEditor {
       locked: 'Code locked after unsuccessful attempts. Get a replacement code for this same request.',
       verified: 'Access verified. No signature has been recorded. A replacement code lets you verify again if your session has ended.',
       replaced: 'This code was replaced. Refresh status to load the current invitation.',
-      submitted: invitation.progress === 'awaiting_company' ? 'Client submission recorded. Awaiting company countersignature; this file is not complete.' : 'Client submission recorded. Final document generation is pending; this file is not complete.',
+      submitted: invitation.progress === 'completed' ? 'All required signatures, the completed PDF and signing history are saved. Ready to start.' : invitation.progress === 'awaiting_company' ? 'Client submission recorded. Awaiting company countersignature; this file is not complete.' : 'Client submission recorded. Final document generation is pending; this file is not complete.',
       request_expired: 'This signing request has expired. Contact the company; a replacement code cannot extend it.',
     };
     document.querySelector('#demo-status').textContent = messages[invitation.state];
     this.renderCountdown();
+  }
+
+  renderCompletion(state) {
+    const visible = state && ['finalizing', 'completed'].includes(state.state);
+    document.querySelector('#file-completion').hidden = !visible;
+    if (!visible) return;
+    const complete = state.state === 'completed';
+    document.querySelector('#completion-status').textContent = complete
+      ? `Completed PDF and signing history saved ${this.dateFormat.format(Date.parse(state.completedAt))}. Ready to start.`
+      : 'All required signatures are recorded. Final artifacts are still pending; this file is not ready to start.';
+    document.querySelector('#completion-error').textContent = state.error || '';
+    document.querySelector('#completion-error').hidden = !state.error;
+    const retry = document.querySelector('#finalize-agreement');
+    retry.hidden = complete;
+    retry.textContent = state.error ? 'Retry finalization' : 'Generate final agreement';
+    document.querySelector('#completion-downloads').hidden = !complete;
+    if (complete) {
+      document.querySelector('#completed-pdf-view').href = state.pdfUrl;
+      document.querySelector('#completed-pdf-download').href = `${state.pdfUrl}?download=1`;
+      document.querySelector('#signing-history-view').href = state.historyUrl;
+      document.querySelector('#signing-history-download').href = `${state.historyUrl}?download=1`;
+    }
+  }
+
+  async finalize() {
+    if (this.requestBusy || !this.sessionReady || this.invitation?.progress !== 'finalizing') return;
+    this.requestBusy = true;
+    this.updateState();
+    document.querySelector('#completion-error').hidden = true;
+    document.querySelector('#completion-status').textContent = 'Generating, saving and verifying the completed agreement…';
+    try {
+      const result = await this.client.request(this.invitation.finalization.retryUrl, { workspace_id: this.companyId });
+      this.renderInvitation({ ...this.invitation, progress: result.finalization.state, finalization: result.finalization });
+    } catch (error) {
+      document.querySelector('#completion-error').textContent = error.message;
+      document.querySelector('#completion-error').hidden = false;
+      document.querySelector('#completion-status').textContent = 'Completion is not confirmed. Refresh status or retry finalization safely; recorded signatures are preserved.';
+      if ([401, 403].includes(error.status)) this.showSessionError(error.message);
+    } finally {
+      this.requestBusy = false;
+      this.updateState();
+    }
   }
 
   renderCountdown() {

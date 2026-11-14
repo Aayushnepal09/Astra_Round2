@@ -81,6 +81,19 @@
           <p class="field-hint">Demo mode: no email is sent. Use this link and code to continue as the client.</p>
           <p id="demo-status" class="field-hint" role="status" aria-live="polite"></p>
           <p id="demo-error" class="field-error" role="alert" hidden></p>
+          <a class="button secondary" id="company-countersign" hidden>Review &amp; countersign</a>
+          <section id="file-completion" aria-labelledby="completion-heading" hidden>
+            <h3 id="completion-heading">Final agreement</h3>
+            <p id="completion-status" class="field-hint" role="status" aria-live="polite"></p>
+            <p id="completion-error" class="field-error" role="alert" hidden></p>
+            <button class="button secondary" id="finalize-agreement" type="button" hidden>Retry finalization</button>
+            <div id="completion-downloads" class="draft-agreement-actions" hidden>
+              <a class="button secondary" id="completed-pdf-view" target="_blank" rel="noopener">View completed PDF</a>
+              <a class="draft-back-link" id="completed-pdf-download">Download PDF</a>
+              <a class="draft-back-link" id="signing-history-view" target="_blank" rel="noopener">View signing history</a>
+              <a class="draft-back-link" id="signing-history-download">Download signing history</a>
+            </div>
+          </section>
           <div id="demo-invitation" hidden>
             <div class="field"><label for="demo-link">Signing link</label><div class="input-wrap"><input id="demo-link" readonly type="text"></div></div>
             <div class="field"><label for="demo-code">Access code</label><div class="input-wrap"><input id="demo-code" readonly type="text" autocomplete="off"></div></div>

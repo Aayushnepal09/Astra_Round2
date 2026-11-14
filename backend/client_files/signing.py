@@ -46,8 +46,9 @@ def signing_recipient(invitation):
     recipient = access.recipient
     issued = recipient.signing_request
     if (recipient.role != "client" or issued.client_file.status not in (
-            ClientFile.Status.AWAITING_CLIENT, ClientFile.Status.AWAITING_COMPANY, ClientFile.Status.FINALIZING)
-            or (issued.expires_at is not None and issued.expires_at <= timezone.now())
+            ClientFile.Status.AWAITING_CLIENT, ClientFile.Status.AWAITING_COMPANY, ClientFile.Status.FINALIZING, ClientFile.Status.COMPLETED)
+            or (issued.client_file.status not in (ClientFile.Status.FINALIZING, ClientFile.Status.COMPLETED)
+                and issued.expires_at is not None and issued.expires_at <= timezone.now())
             or issued.client_file.company_id != invitation.company_id
             or issued.template_version.agreement.company_id != invitation.company_id
             or invitation.request_ref != str(issued.pk) or recipient.email != invitation.client_email):
@@ -151,14 +152,26 @@ class DemoRequestIssuer:
         progress = issued.client_file.status
         if progress != ClientFile.Status.AWAITING_CLIENT:
             state = "submitted"
-        if progress != ClientFile.Status.FINALIZING and issued.expires_at and issued.expires_at <= timezone.now():
+        if progress not in (ClientFile.Status.FINALIZING, ClientFile.Status.COMPLETED) and issued.expires_at and issued.expires_at <= timezone.now():
             state = "request_expired"
+        company_url = None
+        if (state != "request_expired" and progress in (ClientFile.Status.AWAITING_COMPANY, ClientFile.Status.FINALIZING, ClientFile.Status.COMPLETED)
+                and "company" in issued.template_version.roles
+                and issued.submissions.filter(recipient__role="client").exists()):
+            company_url = reverse("company_agreement", args=[issued.client_file_id])
         return {
             "requestId": str(issued.pk), "templateVersionId": str(issued.template_version_id),
             "invitationId": str(invitation.pk), "state": state,
             "progress": progress,
+            "companySigningUrl": company_url,
+            "finalization": self.finalization_snapshot(issued),
             "link": reverse("client_invitation", args=[invitation.pk]),
             "code": demo_code(invitation) if state == "pending" else None,
             "expiresAt": invitation.expires_at.isoformat(), "serverNow": timezone.now().isoformat(),
             "canReplace": state in ("expired", "locked", "verified") and progress == ClientFile.Status.AWAITING_CLIENT,
         }
+
+    @staticmethod
+    def finalization_snapshot(issued):
+        from .finalization import AgreementFinalizer
+        return AgreementFinalizer.snapshot(issued)
