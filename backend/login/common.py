@@ -59,11 +59,11 @@ def render_login(request, role, authenticated=False):
     return response
 
 
-def auth_result(request, role):
+def auth_result(request, role, dashboard_url=None):
     response = JsonResponse({
         "authenticated": True, "role": role,
         "message": "You’re logged in.",
-        "dashboardUrl": reverse("company_dashboard") if role == "company" else None,
+        "dashboardUrl": reverse("company_dashboard") if role == "company" else dashboard_url,
         "csrfToken": get_token(request),
         **({"companyId": str(request.user.pk)} if role == "company" else {}),
     })
@@ -103,6 +103,11 @@ def client_identity(request, touch=True):
         revoked_at__isnull=True, company__is_active=True,
     ).first()
     if invitation is None:
+        request.session.flush()
+        return None
+    from client_files.models import SigningAccess
+    from client_files.signing import signing_recipient
+    if SigningAccess.objects.filter(invitation=invitation).exists() and signing_recipient(invitation) is None:
         request.session.flush()
         return None
     if touch:

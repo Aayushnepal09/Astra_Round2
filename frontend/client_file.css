@@ -59,6 +59,20 @@
 .draft-safety-note strong { display: block; margin-bottom: 5px; color: var(--ink); font-size: 12px; }
 .draft-guidance > .draft-next-step { margin-top: 22px; font-size: 11px; }
 .draft-footer { padding-top: 25px; color: var(--muted); font-size: 10px; }
+.draft-agreement-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; }
+.draft-agreement-actions .draft-back-link { margin: 0; font-size: 12px; }
+.draft-section select { width: 100%; min-width: 0; min-height: 46px; padding: 11px 12px; border: 0; background: #f8fafd; color: var(--ink); font: inherit; font-size: 13px; }
+.draft-section .input-wrap:has(select) { display: block; }
+.draft-setup-summary { margin-top: 22px; }
+.draft-setup-summary h3 { margin: 0 0 9px; font-size: 13px; }
+.draft-setup-summary ul { padding-left: 18px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.8; }
+.draft-use-client { margin-bottom: 18px; font-size: 12px; }
+.demo-request { border-top: 1px solid var(--line); }
+.demo-request .field { margin-top: 18px; }
+.demo-request input { width: 100%; min-width: 0; padding: 12px; }
+.demo-request .field-hint { overflow-wrap: anywhere; }
+#demo-code, #demo-expiry { font-variant-numeric: tabular-nums; }
+.draft-field-grid input:disabled { cursor: default; }
 
 @media (max-width: 950px) {
   .draft-layout { grid-template-columns: minmax(0, 1fr) 210px; gap: 24px; }

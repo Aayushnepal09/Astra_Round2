@@ -4,7 +4,7 @@
   <link rel="stylesheet" href="{{ static_prefix }}client_file.css">
   <script type="module" src="{{ static_prefix }}client_file.js"></script>
 {% endblock %}
-{% block body_attributes %}class="draft-editor" data-save-url="{{ save_url }}" data-session-url="{{ session_url }}" data-login-url="{{ login_url }}" data-company-id="{{ company_id }}"{% endblock %}
+{% block body_attributes %}class="draft-editor" data-save-url="{{ save_url }}" data-session-url="{{ session_url }}" data-login-url="{{ login_url }}" data-company-id="{{ company_id }}" data-templates-url="{{ templates_url }}" data-request-url="{{ request_url }}"{% endblock %}
 {% block content %}
   <a class="draft-skip-link" href="#draft-main">Skip to client file</a>
   <header class="draft-header">
@@ -14,7 +14,7 @@
 
   <main class="draft-main" id="draft-main" tabindex="-1">
     <a class="draft-back-link" href="{{ dashboard_url }}#files"><svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg>Back to client files</a>
-    <div class="draft-heading"><div><h1 id="draft-title">{% if is_new %}New client file{% else %}{{ draft_data.clientName }}{% endif %}</h1><p>Keep the details for this job or case together. You can finish signer setup later.</p></div><span class="draft-badge">Draft · needs setup</span></div>
+    <div class="draft-heading"><div><h1 id="draft-title">{% if is_new %}New client file{% else %}{{ draft_data.clientName }}{% endif %}</h1><p>Keep the details for this job or case together. Save your setup before sending a request.</p></div><span class="draft-badge" id="file-status">{{ draft_data.statusLabel }}</span></div>
 
     <noscript><p class="draft-alert">Enable JavaScript to save this client file. Your company workspace remains available through the back link.</p></noscript>
     <div class="draft-alert" id="draft-session-error" role="alert" hidden><div><strong>We couldn’t check your session.</strong><p id="draft-session-error-message"></p><a href="{{ login_url }}" target="_blank" rel="noopener">Sign in in a new tab</a></div><button class="button secondary" type="button" id="retry-session">Try again</button></div>
@@ -40,12 +40,31 @@
             </div>
           </section>
 
+          <section class="draft-section" aria-labelledby="agreement-selection-heading">
+            <h2 id="agreement-selection-heading">Published agreement</h2>
+            <p class="draft-section-copy">Choose a published version for this file. It stays fixed when the template's draft or later versions change.</p>
+            <div class="field"><label for="template_version">Template version <span class="optional-label">Optional for a draft</span></label><div class="input-wrap"><select id="template_version" name="template_version" aria-describedby="template-version-status template_version-error"><option value="">Select later</option>{% if draft_data.selectedTemplate %}<option value="{{ draft_data.selectedTemplate.id }}" selected>{{ draft_data.selectedTemplate.name }} · Version {{ draft_data.selectedTemplate.number }}</option>{% endif %}</select></div><p class="field-error" id="template_version-error" hidden></p></div>
+            <p class="field-hint" id="template-version-status" role="status" aria-live="polite">Loading published versions…</p>
+            <p class="field-error" id="template-list-error" role="alert" hidden></p>
+            <div class="draft-agreement-actions"><button class="button secondary" type="button" id="template-load-more" hidden>Load more versions</button><a id="selected-template-preview" class="draft-back-link" href="#" target="_blank" rel="noopener" hidden>Preview selected version (new tab)</a></div>
+            <div class="draft-setup-summary"><h3>Setup details</h3><ul id="agreement-setup-issues" aria-live="polite"></ul><p class="field-hint">Missing setup details do not prevent saving this draft. Selecting a version creates no signing request or invitation.</p></div>
+          </section>
+
           <section class="draft-section" aria-labelledby="signer-details-heading">
-            <h2 id="signer-details-heading">Signer details <span class="optional-label">Optional for a draft</span></h2>
-            <p class="draft-section-copy">Add the person who will sign for the client when you know their details.</p>
+            <h2 id="signer-details-heading">Client signer <span class="optional-label">Optional for a draft</span></h2>
+            <p class="draft-section-copy">Confirm the person who will sign for the client. You can leave these details incomplete in a draft.</p>
+            <button class="button secondary draft-use-client" type="button" id="use-client-details">Use client name and email</button>
             <div class="draft-field-grid">
               <div class="field"><label for="signer_name">Signer name</label><div class="input-wrap"><input id="signer_name" name="signer_name" type="text" value="{{ draft_data.signerName }}" maxlength="200" autocomplete="off" aria-describedby="signer_name-error"></div><p class="field-error" id="signer_name-error" hidden></p></div>
               <div class="field"><label for="signer_email">Signer email</label><div class="input-wrap"><input id="signer_email" name="signer_email" type="email" value="{{ draft_data.signerEmail }}" maxlength="254" autocomplete="off" inputmode="email" spellcheck="false" aria-describedby="signer_email-error"></div><p class="field-error" id="signer_email-error" hidden></p></div>
+            </div>
+          </section>
+          <section class="draft-section" id="company-signer-section" aria-labelledby="company-signer-heading" hidden>
+            <h2 id="company-signer-heading">Company countersigner <span class="optional-label">Optional for a draft</span></h2>
+            <p class="draft-section-copy">This published version includes company fields and requires a company signature. Confirm the countersigner's details when known.</p>
+            <div class="draft-field-grid">
+              <div class="field"><label for="company_signer_name">Company signer name</label><div class="input-wrap"><input id="company_signer_name" name="company_signer_name" type="text" value="{{ draft_data.companySignerName }}" maxlength="200" autocomplete="off" aria-describedby="company_signer_name-error"></div><p class="field-error" id="company_signer_name-error" hidden></p></div>
+              <div class="field"><label for="company_signer_email">Company signer email</label><div class="input-wrap"><input id="company_signer_email" name="company_signer_email" type="email" value="{{ draft_data.companySignerEmail }}" maxlength="254" autocomplete="off" aria-describedby="company_signer_email-error"></div><p class="field-error" id="company_signer_email-error" hidden></p></div>
             </div>
           </section>
         </fieldset>
@@ -55,6 +74,26 @@
           <p class="draft-save-status" id="draft-save-status" role="status" aria-live="polite" hidden></p>
           <div class="draft-save-row"><div><p id="draft-saved-at">{% if is_new %}Not saved yet{% else %}Saved draft{% endif %}</p><p class="draft-unsaved" id="draft-unsaved" hidden>You have unsaved changes.</p></div><button class="button" id="save-draft" type="submit" disabled><span id="save-draft-label">Checking session…</span><svg class="icon" aria-hidden="true"><use href="#icon-check"/></svg></button></div>
         </div>
+        <section class="draft-section demo-request" aria-labelledby="demo-request-heading">
+          <h2 id="demo-request-heading">Signing request</h2>
+          <p class="draft-section-copy" id="demo-send-hint">Save the selected version and signer details first. Issuing a request freezes these details.</p>
+          <button class="button" id="send-demo" type="button" disabled>Send request — Demo</button>
+          <p class="field-hint">Demo mode: no email is sent. Use this link and code to continue as the client.</p>
+          <p id="demo-status" class="field-hint" role="status" aria-live="polite"></p>
+          <p id="demo-error" class="field-error" role="alert" hidden></p>
+          <div id="demo-invitation" hidden>
+            <div class="field"><label for="demo-link">Signing link</label><div class="input-wrap"><input id="demo-link" readonly type="text"></div></div>
+            <div class="field"><label for="demo-code">Access code</label><div class="input-wrap"><input id="demo-code" readonly type="text" autocomplete="off"></div></div>
+            <p class="field-hint" id="demo-expiry"></p>
+            <div class="draft-agreement-actions">
+              <a class="button secondary" id="demo-open" target="_blank" rel="noopener noreferrer">Open link</a>
+              <button class="button secondary" type="button" id="demo-copy-link">Copy link</button>
+              <button class="button secondary" type="button" id="demo-copy-code">Copy code</button>
+              <button class="button secondary" type="button" id="demo-replace" hidden>Get replacement code</button>
+              <button class="button secondary" type="button" id="demo-refresh">Refresh status</button>
+            </div>
+          </div>
+        </section>
       </form>
 
       <aside class="draft-guidance" aria-labelledby="draft-guidance-heading">
@@ -62,7 +101,7 @@
         <h2 id="draft-guidance-heading">A place to begin.</h2>
         <p>Save the details now, then return to this file from your company’s dashboard.</p>
         <div class="draft-safety-note"><svg class="icon" aria-hidden="true"><use href="#icon-shield"/></svg><p><strong>No signing request is created when you save.</strong> This file stays a draft until agreement setup is complete and a separate request is issued.</p></div>
-        <p class="draft-next-step">PDF/DOCX upload, preview, and field drafts are available under Agreement templates. Selecting a published template for this file and signing come later.</p>
+        <p class="draft-next-step">Use the demo invitation to verify access and review the fixed agreement. Verification does not sign it or complete this file.</p>
       </aside>
     </div>
     <footer class="draft-footer">Astra agreement portal</footer>

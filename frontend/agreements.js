@@ -18,6 +18,8 @@ export class AgreementWorkspace {
     this.selectedFieldId = null;
     this.fieldsDirty = false;
     this.fieldsSaving = false;
+    this.publishing = false;
+    this.publishedView = false;
     this.fieldEditVersion = 0;
     this.fieldSession = 0;
     this.dragState = null;
@@ -52,7 +54,7 @@ export class AgreementWorkspace {
     });
     this.element('retry-agreement-preview').addEventListener('click', () => {
       if (this.agreement) this.loadPage(this.pageNumber);
-      else this.open(this.route.split('/')[1]);
+      else this.openFromRoute();
     });
     this.element('previous-agreement-page').addEventListener('click', () => this.loadPage(this.pageNumber - 1));
     this.element('next-agreement-page').addEventListener('click', () => this.loadPage(this.pageNumber + 1));
@@ -82,6 +84,8 @@ export class AgreementWorkspace {
     this.element('agreement-field-editor').addEventListener('input', event => this.updateSelectedField(event));
     this.element('agreement-field-editor').addEventListener('change', event => this.updateSelectedField(event));
     this.element('agreement-fields-save').addEventListener('click', () => this.saveFields());
+    this.element('agreement-template-name').addEventListener('input', () => this.markFieldsDirty('Unsaved template name or field changes.'));
+    this.element('agreement-publish').addEventListener('click', () => this.publishTemplate());
     this.element('agreement-fields-reload').addEventListener('click', () => {
       if (this.agreement && this.confirmLeave()) this.open(this.agreement.id);
     });
@@ -90,7 +94,7 @@ export class AgreementWorkspace {
       this.renderFields();
     });
     window.addEventListener('beforeunload', event => {
-      if (!this.fieldsDirty) return;
+      if (!this.fieldsDirty && !this.publishing) return;
       event.preventDefault();
       event.returnValue = '';
     });
@@ -117,8 +121,8 @@ export class AgreementWorkspace {
   plainClick(event) { return !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey; }
 
   confirmLeave() {
-    if (this.fieldsSaving) {
-      window.alert('The field draft is being saved. Wait for the result before leaving.');
+    if (this.fieldsSaving || this.publishing) {
+      window.alert('Saving or publishing is in progress. Wait for the result before leaving.');
       return false;
     }
     return !this.fieldsDirty || window.confirm('Discard unsaved field changes and leave this agreement?');
@@ -154,6 +158,19 @@ export class AgreementWorkspace {
     return result;
   }
 
+  async recoverPreparationSession() {
+    try {
+      const sessionUrl = new URL('../session/', new URL(document.body.dataset.loginUrl, window.location.origin));
+      const session = await this.client.request(sessionUrl);
+      if (session.companyId === this.companyId) {
+        return new SessionError('Your session has been refreshed. Retry this action. Your unsaved fields and template name are still here.', 403);
+      }
+    } catch {
+      // Keep preparation in place while the user restores the original company session.
+    }
+    return new SessionError('Your session could not be restored for this company. Sign in to this company in a new tab, then retry here. Your unsaved fields and template name are still here. Before reloading, copy your template name and record your field changes so you can restore them.', 403);
+  }
+
   showError(id, message) {
     const container = this.element(id);
     container.querySelector('p').textContent = message;
@@ -180,8 +197,13 @@ export class AgreementWorkspace {
     const hasId = Boolean(id);
     this.element('agreement-library').hidden = hasId;
     this.element('agreement-preview').hidden = !hasId;
-    if (hasId) this.open(id);
+    if (hasId) this.openFromRoute();
     else this.loadList();
+  }
+
+  openFromRoute() {
+    const [, id, versionId] = this.route.split('/');
+    this.open(id === 'published' ? versionId : id, id === 'published');
   }
 
   async loadList() {
@@ -197,6 +219,7 @@ export class AgreementWorkspace {
       const result = this.checkCompany(await this.client.request(this.url('', { page: this.listPage }), undefined, { signal: controller.signal }));
       if (controller.signal.aborted) return;
       this.limits = result.limits;
+      this.element('published-template-count').textContent = `${result.publishedCount} published versions`;
       this.element('agreement-format').textContent = `PDF or DOCX · up to ${result.limits.maxBytes / (1024 * 1024)} MiB · ${result.limits.maxPages} PDF pages.`;
       const fragment = document.createDocumentFragment();
       for (const agreement of result.agreements) {
@@ -214,7 +237,7 @@ export class AgreementWorkspace {
         details.className = 'agreement-list-details';
         const badge = document.createElement('span');
         badge.className = 'status-badge waiting';
-        badge.textContent = 'Unprepared';
+        badge.textContent = 'Preparation draft';
         const processing = document.createElement('span');
         processing.textContent = agreement.processingLabel;
         const saved = document.createElement('span');
@@ -320,9 +343,11 @@ export class AgreementWorkspace {
     });
   }
 
-  async open(id) {
+  async open(id, published = false) {
     this.fieldSession++;
     this.fieldsSaving = false;
+    this.publishing = false;
+    this.publishedView = published;
     this.agreement = null;
     this.fields = [];
     this.selectedFieldId = null;
@@ -332,6 +357,9 @@ export class AgreementWorkspace {
     this.element('agreement-fields-reload').hidden = true;
     this.element('agreement-fields-status').classList.remove('has-error');
     this.element('agreement-fields-status').textContent = 'No unsaved field changes.';
+    this.element('agreement-publish-status').textContent = '';
+    this.element('agreement-publish-error').hidden = true;
+    this.element('agreement-published-versions').hidden = true;
     this.element('agreement-preview-error').hidden = true;
     this.element('retry-agreement-preview').disabled = false;
     this.element('agreement-preview-toolbar').hidden = true;
@@ -344,12 +372,19 @@ export class AgreementWorkspace {
     this.detailController = controller;
     try {
       if (!/^[0-9a-f-]{36}$/i.test(id)) throw new SessionError('This agreement link is invalid. Return to all agreements.');
-      const result = this.checkCompany(await this.client.request(this.url(`${id}/`), undefined, { signal: controller.signal }));
+      const result = this.checkCompany(await this.client.request(this.url(`${published ? 'published/' : ''}${id}/`), undefined, { signal: controller.signal }));
       if (controller.signal.aborted) return;
       this.agreement = result.agreement;
       this.fields = this.agreement.fields || [];
       this.selectedFieldId = null;
       this.fieldsDirty = false;
+      this.element('agreement-template-name').value = this.agreement.templateName || '';
+      this.element('agreement-version-state').textContent = published ? `Published · Version ${this.agreement.number}` : 'Preparation draft · Unprepared';
+      this.element('agreement-preview-note').textContent = published
+        ? 'This published PDF and its field placeholders are read only. Editing the preparation draft does not change this version.'
+        : 'Review every page, especially converted DOCX layout. Draft changes do not alter published versions.';
+      this.renderVersions();
+      this.updatePublicationControls();
       this.element('agreement-preview-filename').textContent = this.agreement.filename;
       this.element('agreement-processing-status').textContent = [this.agreement.processingLabel, this.agreement.conversionVersion].filter(Boolean).join(' · ');
       if (this.agreement.processingState !== 'ready') {
@@ -360,7 +395,7 @@ export class AgreementWorkspace {
       this.element('agreement-page-number').max = this.agreement.pageCount;
       this.element('agreement-page-total').textContent = `of ${this.agreement.pageCount}`;
       this.element('agreement-preview-toolbar').hidden = false;
-      this.element('agreement-prepare-toggle').hidden = false;
+      this.element('agreement-prepare-toggle').hidden = published;
       this.element('agreement-field-editor').hidden = true;
       this.element('agreement-prepare-toggle').textContent = 'Prepare fields';
       this.element('agreement-prepare-toggle').setAttribute('aria-expanded', 'false');
@@ -440,7 +475,8 @@ export class AgreementWorkspace {
     this.fieldEditVersion++;
     this.element('agreement-fields-status').textContent = message;
     this.element('agreement-fields-status').classList.remove('has-error');
-    this.element('agreement-fields-save').disabled = this.fieldsSaving;
+    this.element('agreement-fields-save').disabled = this.fieldsSaving || this.publishing;
+    this.updatePublicationControls();
   }
 
   addField(type) {
@@ -494,7 +530,7 @@ export class AgreementWorkspace {
   renderFields(syncProperties = true) {
     const layer = this.element('agreement-field-layer');
     const activeField = document.activeElement?.dataset.fieldId;
-    layer.inert = this.element('agreement-field-editor').hidden;
+    layer.inert = this.publishedView || this.element('agreement-field-editor').hidden;
     layer.replaceChildren();
     const pageFields = this.fields.filter(item => item.page === this.pageNumber);
     const picker = this.element('agreement-field-picker');
@@ -590,12 +626,14 @@ export class AgreementWorkspace {
   }
 
   async saveFields() {
-    if (!this.agreement || !this.fieldsDirty || this.fieldsSaving) return;
+    if (!this.agreement || this.publishedView || !this.fieldsDirty || this.fieldsSaving || this.publishing) return;
     const agreementId = this.agreement.id;
     const session = this.fieldSession;
     const editVersion = this.fieldEditVersion;
     const snapshot = JSON.parse(JSON.stringify(this.fields));
+    const templateName = this.element('agreement-template-name').value;
     this.fieldsSaving = true;
+    this.updatePublicationControls();
     const button = this.element('agreement-fields-save');
     button.disabled = true;
     this.element('agreement-fields-status').textContent = 'Saving field draft…';
@@ -606,8 +644,9 @@ export class AgreementWorkspace {
           'Content-Type': 'application/json',
           'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content,
           'X-Workspace-ID': this.companyId,
-        }, body: JSON.stringify({ fields: snapshot, revision: this.agreement.fieldsRevision, pdfSha256: this.agreement.pdfSha256 }),
+        }, body: JSON.stringify({ fields: snapshot, templateName, revision: this.agreement.fieldsRevision, pdfSha256: this.agreement.pdfSha256 }),
       });
+      if (response.status === 403) throw await this.recoverPreparationSession();
       let payload;
       try { payload = await response.json(); }
       catch { throw new SessionError('The server could not confirm this save. Retry to check and save the same draft.', response.status); }
@@ -623,11 +662,13 @@ export class AgreementWorkspace {
       if (!this.fieldsDirty) {
         this.stopFieldPointer?.();
         this.fields = this.agreement.fields || [];
+        this.element('agreement-template-name').value = this.agreement.templateName || '';
       }
       this.element('agreement-fields-status').textContent = this.fieldsDirty
         ? 'Earlier changes saved. You have newer unsaved field changes.'
         : 'Field draft saved. Agreement remains Unprepared.';
       this.renderFields();
+      this.renderVersions();
     } catch (error) {
       if (session !== this.fieldSession || this.agreement?.id !== agreementId) return;
       if (this.handleSession(error)) return;
@@ -640,6 +681,85 @@ export class AgreementWorkspace {
       if (session === this.fieldSession) {
         this.fieldsSaving = false;
         button.disabled = !this.fieldsDirty;
+        this.updatePublicationControls();
+      }
+    }
+  }
+
+  updatePublicationControls() {
+    const button = this.element('agreement-publish');
+    button.disabled = !this.agreement || this.publishedView || this.fieldsDirty || this.fieldsSaving || this.publishing;
+    button.textContent = this.publishing ? 'Publishing…' : 'Publish template';
+    button.setAttribute('aria-busy', String(this.publishing));
+    this.element('agreement-publish-hint').textContent = this.fieldsDirty || this.fieldsSaving
+      ? 'Save your draft changes before publishing.'
+      : 'Publication requires a template name and a required client signature. Include a required company signature if any fields use the company role.';
+  }
+
+  renderVersions() {
+    const container = this.element('agreement-published-versions');
+    container.hidden = this.publishedView || !this.agreement;
+    const list = this.element('agreement-version-list');
+    list.replaceChildren();
+    for (const version of this.agreement?.versions || []) {
+      const item = document.createElement('li');
+      const link = document.createElement('a');
+      link.href = version.previewUrl;
+      link.textContent = `${version.name} · Version ${version.number} · ${version.roles.join(' + ')}`;
+      link.addEventListener('click', event => {
+        if (!this.plainClick(event)) return;
+        event.preventDefault();
+        this.navigateWorkspace(`templates/published/${version.id}`);
+      });
+      item.append(link);
+      list.append(item);
+    }
+    if (!list.children.length) {
+      const item = document.createElement('li');
+      item.textContent = 'No published versions yet. Save and publish your preparation draft to reuse it.';
+      list.append(item);
+    }
+  }
+
+  async publishTemplate() {
+    if (this.element('agreement-publish').disabled) return;
+    const session = this.fieldSession;
+    const agreement = this.agreement;
+    this.publishing = true;
+    this.element('agreement-fields-save').disabled = true;
+    this.element('agreement-publish-error').hidden = true;
+    this.element('agreement-publish-status').textContent = 'Validating saved preparation and publishing…';
+    this.updatePublicationControls();
+    try {
+      const response = await fetch(this.url(`${agreement.id}/publish/`), {
+        method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json', 'X-Workspace-ID': this.companyId,
+          'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content },
+        body: JSON.stringify({ revision: agreement.fieldsRevision, name: agreement.templateName, pdfSha256: agreement.pdfSha256 }),
+      });
+      if (response.status === 403) throw await this.recoverPreparationSession();
+      let payload;
+      try { payload = await response.json(); }
+      catch { throw new SessionError('Publication could not be confirmed. Retry publishing this saved revision to check the result.', response.status); }
+      if (!response.ok) throw new SessionError(payload.error || 'Publication failed. Your draft is unchanged.', response.status, {}, payload.code);
+      this.checkCompany(payload);
+      if (session !== this.fieldSession) return;
+      if (!payload.version?.id) throw new SessionError('Publication could not be confirmed. Retry this saved revision.');
+      const versions = this.agreement.versions || [];
+      this.agreement.versions = [payload.version, ...versions.filter(version => version.id !== payload.version.id)];
+      this.element('published-template-count').textContent = `${payload.publishedCount} published versions`;
+      this.renderVersions();
+      this.element('agreement-publish-status').textContent = `Published ${payload.version.name}, Version ${payload.version.number}. This snapshot can now be selected for client files.${this.fieldsDirty ? ' Newer draft changes are still unsaved.' : ''}`;
+    } catch (error) {
+      if (session !== this.fieldSession) return;
+      this.element('agreement-publish-status').textContent = 'Publication needs attention.';
+      if (error.code === 'draft_conflict') this.element('agreement-fields-reload').hidden = false;
+      this.showError('agreement-publish-error', `${error.message} Your draft changes are still here.`);
+    } finally {
+      if (session === this.fieldSession) {
+        this.publishing = false;
+        this.element('agreement-fields-save').disabled = !this.fieldsDirty;
+        this.updatePublicationControls();
       }
     }
   }

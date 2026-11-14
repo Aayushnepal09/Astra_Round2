@@ -1,0 +1,30 @@
+.review-notice { max-width: 75ch; color: var(--ink); font-size: 14px; line-height: 1.75; }
+.review-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 24px 0 12px; }
+.review-controls span, .review-controls label { font-size: 13px; color: var(--muted); }
+.review-controls select { min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font: inherit; }
+.review-viewport { overflow: auto; max-height: 80vh; min-height: 180px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.review-viewport img { display: block; width: 100%; max-width: none; height: auto; }
+.review-controls button { min-height: 44px; }
+#review-page-label { font-variant-numeric: tabular-nums; }
+.signing-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr); align-items: start; gap: 28px; }
+.signing-document, .signing-form { min-width: 0; }
+.signing-form { padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.signing-form h2, .signing-confirmation h2 { margin: 0 0 12px; font-size: 20px; }
+.signing-form fieldset { min-width: 0; padding: 0; margin: 24px 0; border: 0; }
+.signing-form .field { margin-bottom: 24px; }
+.signing-form .input-wrap input, .signing-form textarea { width: 100%; min-width: 0; padding: 12px; color: var(--ink); font: inherit; font-size: 14px; }
+.signing-form textarea { min-height: 90px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); resize: vertical; }
+.signing-field-reference { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 8px 0; color: var(--muted); font-size: 12px; }
+.signing-field-reference button { min-height: 44px; padding: 8px; border: 0; background: transparent; color: var(--blue); text-decoration: underline; text-underline-offset: 3px; font: inherit; cursor: pointer; }
+.signing-form label { overflow-wrap: anywhere; }
+.signing-consent label, .signing-acknowledgement { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; line-height: 1.7; }
+.signing-consent input, .signing-acknowledgement input { flex-shrink: 0; width: 20px; height: 20px; margin-top: 2px; accent-color: var(--blue); }
+.signing-consent { padding-top: 20px; border-top: 1px solid var(--line); }
+.signing-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.signing-confirmation { padding: 22px; margin-bottom: 24px; border: 1px solid var(--success); border-radius: 12px; background: var(--success-soft); }
+.signing-confirmation p { font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.review-sheet { position: relative; width: 100%; }
+.review-field-marker { position: absolute; border: 1px solid var(--blue); background: rgb(47 101 185 / 12%); color: var(--ink); font-size: 11px; line-height: 1.4; overflow: hidden; pointer-events: none; }
+.signing-form input[aria-invalid="true"], .signing-form textarea[aria-invalid="true"] { outline: 2px solid var(--error); outline-offset: 2px; }
+@media (max-width: 850px) { .signing-layout { grid-template-columns: minmax(0, 1fr); } .review-viewport { max-height: 65vh; } }
+@media (max-width: 480px) { .signing-form { padding: 20px; } .signing-actions .button { flex: 1 1 100%; } }

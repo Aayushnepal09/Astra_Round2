@@ -4,7 +4,7 @@ import uuid
 from urllib.parse import unquote
 
 from django.conf import settings
-from django.core.exceptions import SuspiciousFileOperation, ValidationError
+from django.core.exceptions import RequestDataTooBig, SuspiciousFileOperation, ValidationError
 from django.core.paginator import Paginator
 from django.db import DatabaseError, transaction
 from django.db.models import F
@@ -14,18 +14,20 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views import View
 
-from login.common import auth_error, company_authenticated
+from login.common import auth_error, company_authenticated, read_json
 
-from .models import Agreement, AgreementField
+from .models import Agreement, AgreementField, TemplateVersion
+from .publishing import TemplatePublisher
 from .processing import DocumentError, PdfProcessor
 from .storage import PrivateDocumentStorage
 from .uploads import AgreementUpload
 
 
-def agreement_data(agreement):
-    return {
+def agreement_data(agreement, *, include_versions=False):
+    data = {
         "id": str(agreement.pk),
         "filename": agreement.original_filename,
+        "templateName": agreement.title,
         "preparationState": agreement.preparation_state,
         "processingState": agreement.processing_state,
         "processingLabel": agreement.get_processing_state_display(),
@@ -36,25 +38,32 @@ def agreement_data(agreement):
         "conversionVersion": agreement.conversion_version,
         "pdfSha256": agreement.pdf_sha256,
         "fieldsRevision": agreement.fields_revision,
-        "fields": [
-            {
-                "id": str(field.pk),
-                "type": field.field_type,
-                "label": field.label,
-                "required": field.required,
-                "role": field.role,
-                "page": field.page_number,
-                "x": field.x,
-                "y": field.y,
-                "width": field.width,
-                "height": field.height,
-            }
-            for field in agreement.fields.all()
-        ],
+        "fields": [field.snapshot() for field in agreement.fields.all()],
         "createdAt": agreement.created_at.isoformat(),
         "detailUrl": reverse("company_agreement_detail", args=[agreement.pk]),
         "pageUrl": reverse("company_agreement_page", args=[agreement.pk, 1]).removesuffix("1/"),
     }
+    if include_versions:
+        data["versions"] = [version_data(version) for version in agreement.versions.all()]
+    return data
+
+
+def version_data(version, *, preview=False):
+    agreement = version.agreement
+    data = {
+        "id": str(version.pk), "name": version.name, "number": version.number,
+        "roles": version.roles, "publishedAt": version.published_at.isoformat(),
+        "previewUrl": f'{reverse("company_dashboard")}#templates/published/{version.pk}',
+    }
+    if preview:
+        data.update({
+            "filename": f"{version.name} · Version {version.number}",
+            "processingState": "ready", "processingLabel": "Published version · read only",
+            "pageCount": agreement.page_count, "fields": version.fields,
+            "pdfSha256": version.pdf_sha256, "conversionVersion": agreement.conversion_version,
+            "pageUrl": reverse("company_template_page", args=[version.pk, 1]).removesuffix("1/"),
+        })
+    return data
 
 
 class CompanyAgreementAccessMixin:
@@ -87,6 +96,7 @@ class CompanyAgreementList(CompanyAgreementAccessMixin, View):
         return JsonResponse({
             "companyId": str(request.user.pk),
             "agreements": [agreement_data(agreement) for agreement in page],
+            "publishedCount": TemplateVersion.objects.filter(agreement__company=request.user).count(),
             "pagination": {
                 "number": page.number, "pages": page.paginator.num_pages,
                 "total": page.paginator.count,
@@ -139,7 +149,7 @@ class CompanyAgreementDetail(CompanyAgreementAccessMixin, View):
         agreement = Agreement.objects.filter(company=request.user, pk=agreement_id).first()
         if agreement is None:
             return auth_error("Agreement not found in this workspace.", status=404)
-        return JsonResponse({"companyId": str(request.user.pk), "agreement": agreement_data(agreement)})
+        return JsonResponse({"companyId": str(request.user.pk), "agreement": agreement_data(agreement, include_versions=True)})
 
 
 class CompanyAgreementPage(CompanyAgreementAccessMixin, View):
@@ -183,6 +193,10 @@ class CompanyAgreementFields(CompanyAgreementAccessMixin, View):
         revision = payload.get("revision")
         if type(revision) is not int or not 0 <= revision <= 2147483647:
             return auth_error("Reopen the agreement to load its current field draft before saving.", status=409)
+        template_name = payload.get("templateName", agreement.title)
+        if not isinstance(template_name, str) or len(template_name.strip()) > 200:
+            return auth_error("Use a template name up to 200 characters. A draft name may be blank.")
+        template_name = template_name.strip()
         submitted = payload["fields"]
         if len(submitted) > 200:
             return auth_error("This preparation draft has too many fields.")
@@ -248,12 +262,12 @@ class CompanyAgreementFields(CompanyAgreementAccessMixin, View):
             changed = Agreement.objects.filter(
                 pk=agreement.pk, company=request.user, fields_revision=revision,
                 pdf_sha256=payload["pdfSha256"], processing_state=Agreement.ProcessingState.READY,
-            ).update(fields_revision=F("fields_revision") + 1, updated_at=timezone.now())
+            ).update(fields_revision=F("fields_revision") + 1, title=template_name, updated_at=timezone.now())
             if not changed:
                 agreement.refresh_from_db()
-                current = agreement_data(agreement)
+                current = agreement_data(agreement, include_versions=True)
                 proposed = [dict(item, label=item["label"].strip(), id=str(uuid.UUID(str(item["id"])))) for item in submitted]
-                if sorted(current["fields"], key=lambda item: item["id"]) == sorted(proposed, key=lambda item: item["id"]):
+                if agreement.title == template_name and sorted(current["fields"], key=lambda item: item["id"]) == sorted(proposed, key=lambda item: item["id"]):
                     # A previous save may have succeeded before its response was lost.
                     return JsonResponse({"companyId": str(request.user.pk), "agreement": current})
                 return JsonResponse({
@@ -263,8 +277,68 @@ class CompanyAgreementFields(CompanyAgreementAccessMixin, View):
             AgreementField.objects.filter(agreement=agreement).delete()
             AgreementField.objects.bulk_create(fields)
             agreement.fields_revision = revision + 1
-            result = agreement_data(agreement)
+            agreement.title = template_name
+            result = agreement_data(agreement, include_versions=True)
         return JsonResponse({
             "companyId": str(request.user.pk),
             "agreement": result,
         })
+
+
+class CompanyTemplatePublish(CompanyAgreementAccessMixin, View):
+    def post(self, request, agreement_id):
+        try:
+            payload = read_json(request)
+        except (ValueError, RequestDataTooBig, UnreadablePostError):
+            return auth_error("Send a valid publication request.")
+        revision, name, pdf_sha256 = (payload.get(key) for key in ("revision", "name", "pdfSha256"))
+        if (type(revision) is not int or not 0 <= revision <= 2147483647
+                or not isinstance(name, str) or len(name) > 200
+                or not isinstance(pdf_sha256, str) or len(pdf_sha256) != 64):
+            return auth_error("Save the preparation draft and its template name before publishing.")
+        try:
+            version, created = TemplatePublisher(request.user).publish(
+                agreement_id, revision=revision, name=name.strip(), pdf_sha256=pdf_sha256,
+            )
+        except Agreement.DoesNotExist:
+            return auth_error("Agreement not found in this workspace.", status=404)
+        except ValidationError as error:
+            return JsonResponse({
+                "error": " ".join(error.messages), "issues": error.messages,
+                "code": getattr(error, "code", "publication_invalid"),
+            }, status=422)
+        except (OSError, SuspiciousFileOperation):
+            return auth_error("The saved PDF is unavailable. Try its preview, then retry publishing. Your draft is unchanged.", status=503)
+        return JsonResponse({
+            "companyId": str(request.user.pk), "version": version_data(version),
+            "publishedCount": TemplateVersion.objects.filter(agreement__company=request.user).count(),
+        }, status=201 if created else 200)
+
+
+class CompanyTemplateList(CompanyAgreementAccessMixin, View):
+    def get(self, request):
+        versions = TemplateVersion.objects.filter(agreement__company=request.user).select_related("agreement")
+        page = Paginator(versions, 20).get_page(request.GET.get("page", 1))
+        return JsonResponse({
+            "companyId": str(request.user.pk), "versions": [version_data(version) for version in page],
+            "pagination": {"number": page.number, "pages": page.paginator.num_pages,
+                           "total": page.paginator.count, "hasNext": page.has_next()},
+        })
+
+
+class CompanyTemplateDetail(CompanyAgreementAccessMixin, View):
+    def get(self, request, version_id):
+        version = TemplateVersion.objects.filter(pk=version_id, agreement__company=request.user).select_related("agreement").first()
+        if version is None:
+            return auth_error("Published version not found in this workspace.", status=404)
+        return JsonResponse({"companyId": str(request.user.pk), "agreement": version_data(version, preview=True)})
+
+
+class CompanyTemplatePage(CompanyAgreementPage):
+    def get(self, request, version_id, page_number):
+        version = TemplateVersion.objects.filter(pk=version_id, agreement__company=request.user).select_related("agreement").first()
+        if version is None:
+            return auth_error("Published version not found in this workspace.", status=404)
+        if version.pdf_sha256 != version.agreement.pdf_sha256:
+            return auth_error("This published PDF identity is unavailable. Contact your administrator.", status=409)
+        return super().get(request, agreement_id=version.agreement_id, page_number=page_number)

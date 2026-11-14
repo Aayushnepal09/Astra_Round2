@@ -1,6 +1,6 @@
 import uuid
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import RequestDataTooBig, SuspiciousFileOperation, ValidationError
 from django.db import DatabaseError, IntegrityError, transaction
 from django.http import HttpResponseNotFound, JsonResponse
 from django.shortcuts import redirect, render
@@ -8,9 +8,11 @@ from django.urls import reverse
 from django.views import View
 
 from login.common import auth_error, company_authenticated, company_context, read_json
+from login.client_throttle import ClientThrottleExceeded
 
 from .forms import ClientFileDraftForm
-from .models import ClientFile
+from .models import ClientFile, SigningRecipient, SigningRequest
+from .signing import DemoRequestIssuer
 from .workspace import CompanyFileWorkspace
 
 
@@ -55,7 +57,7 @@ class CompanyFileEditor(CompanyFileAccessMixin, View):
         file = (
             ClientFile(company=request.user)
             if self.is_new
-            else ClientFile.objects.filter(company=request.user, pk=file_id).first()
+            else ClientFile.objects.select_related("template_version__agreement").filter(company=request.user, pk=file_id).first()
         )
         if file is None:
             return HttpResponseNotFound("Client file not found.")
@@ -66,6 +68,8 @@ class CompanyFileEditor(CompanyFileAccessMixin, View):
                 "company_file_detail", args=[file.pk]
             ),
             "is_new": self.is_new,
+            "templates_url": reverse("company_template_list"),
+            "request_url": reverse("company_file_request", args=[file.pk]) if not self.is_new else "",
         })
 
     def post(self, request, file_id=None):
@@ -145,3 +149,42 @@ class CompanyFileEditor(CompanyFileAccessMixin, View):
 
 class CompanyFileCreate(CompanyFileEditor):
     is_new = True
+
+
+class CompanyFileRequest(CompanyFileAccessMixin, View):
+    json_response = True
+
+    def get(self, request, file_id):
+        try:
+            if not ClientFile.objects.filter(pk=file_id, company=request.user).exists():
+                return auth_error("Client file not found.", status=404)
+            issued = SigningRequest.objects.filter(client_file_id=file_id, client_file__company=request.user).first()
+            return JsonResponse({"invitation": DemoRequestIssuer(request.user).snapshot(issued) if issued else None})
+        except DatabaseError:
+            return auth_error("Couldn’t load the invitation. Try again.", status=503)
+
+    def post(self, request, file_id):
+        try:
+            payload = read_json(request)
+            if payload.get("workspace_id") != str(request.user.pk):
+                return JsonResponse({"error": "Your workspace changed. Reload this file.", "code": "workspace_changed"}, status=409)
+            if set(payload) - {"workspace_id", "replaceInvitationId"}:
+                return auth_error("Send only the supported request options.")
+            issuer = DemoRequestIssuer(request.user)
+            if "replaceInvitationId" in payload:
+                previous = str(uuid.UUID(payload["replaceInvitationId"]))
+                issued = issuer.replace_code(file_id, previous)
+                created = False
+            else:
+                issued, created = issuer.issue(file_id)
+            return JsonResponse({"invitation": issuer.snapshot(issued), "created": created}, status=201 if created else 200)
+        except (ClientFile.DoesNotExist, SigningRecipient.DoesNotExist):
+            return auth_error("Client file or request not found.", status=404)
+        except (ValueError, TypeError, AttributeError, RequestDataTooBig):
+            return auth_error("Send a valid request option.")
+        except ValidationError as error:
+            return auth_error(" ".join(error.messages), status=422)
+        except ClientThrottleExceeded:
+            return auth_error("Code generation is temporarily locked. Wait and retry; the same request will be used.", status=429)
+        except (DatabaseError, OSError, SuspiciousFileOperation):
+            return auth_error("Couldn’t confirm the invitation. Retry to recover the same request.", status=503)

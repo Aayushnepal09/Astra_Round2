@@ -3,6 +3,7 @@ from django.views.generic import RedirectView
 
 from login.client import ClientLogin, ClientLogout, ClientSession
 from login.company import CompanyDashboard, CompanyLogin, CompanyLogout, CompanySession
+from client_files.client import ClientAgreement, ClientAgreementSigning
 
 
 urlpatterns = [
@@ -16,5 +17,8 @@ urlpatterns = [
     path("client/login/", ClientLogin.as_view(), name="client_login"),
     path("client/login/<uuid:invitation_id>/", ClientLogin.as_view(), name="client_invitation"),
     path("client/session/", ClientSession.as_view(), name="client_session"),
+    path("client/agreements/<uuid:invitation_id>/", ClientAgreement.as_view(), name="client_agreement"),
+    path("client/agreements/<uuid:invitation_id>/signing/", ClientAgreementSigning.as_view(), name="client_agreement_signing"),
+    path("client/agreements/<uuid:invitation_id>/pages/<int:page_number>/", ClientAgreement.as_view(), name="client_agreement_page"),
     path("client/logout/", ClientLogout.as_view(), name="client_logout"),
 ]

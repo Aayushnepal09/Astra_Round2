@@ -337,3 +337,95 @@ class AgreementField(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         return super().save(*args, **kwargs)
+
+    def snapshot(self):
+        return {
+            "id": str(self.pk), "type": self.field_type, "label": self.label,
+            "required": self.required, "role": self.role, "page": self.page_number,
+            "x": self.x, "y": self.y, "width": self.width, "height": self.height,
+        }
+
+
+class PublishedVersionQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise ValidationError("Published versions cannot be edited. Publish a new draft revision.")
+
+    def delete(self):
+        raise ValidationError("Published versions must be preserved.")
+
+
+class TemplateVersion(models.Model):
+    """Frozen preparation; document metadata lives on the immutable Agreement."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    agreement = models.ForeignKey(Agreement, on_delete=models.PROTECT, related_name="versions")
+    number = models.PositiveIntegerField()
+    name = models.CharField(max_length=200)
+    source_revision = models.PositiveIntegerField()
+    pdf_sha256 = models.CharField(max_length=64, validators=[Agreement.hash_validator])
+    fields = models.JSONField()
+    published_at = models.DateTimeField(auto_now_add=True)
+
+    objects = PublishedVersionQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["-published_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(fields=["agreement", "number"], name="template_version_number_uniq"),
+            models.UniqueConstraint(fields=["agreement", "source_revision"], name="template_revision_uniq"),
+            models.CheckConstraint(condition=models.Q(number__gt=0), name="template_version_positive"),
+        ]
+
+    @property
+    def roles(self):
+        return [role for role in ("client", "company") if any(field["role"] == role for field in self.fields)]
+
+    def clean(self):
+        super().clean()
+        agreement = self.agreement
+        errors = []
+        if agreement.processing_state != Agreement.ProcessingState.READY or self.pdf_sha256 != agreement.pdf_sha256:
+            errors.append("Publish only a validated agreement bound to its exact PDF.")
+        if not isinstance(self.name, str) or not self.name.strip():
+            errors.append("Enter a template name, save the draft, then publish again.")
+        if not isinstance(self.fields, list):
+            raise ValidationError("The saved field draft is invalid. Reopen and save it again.")
+        seen = set()
+        for index, item in enumerate(self.fields, 1):
+            try:
+                if not isinstance(item, dict) or set(item) != {
+                    "id", "type", "label", "required", "role", "page", "x", "y", "width", "height",
+                }:
+                    raise ValueError
+                field_id = uuid.UUID(item["id"])
+                if field_id in seen or type(item["required"]) is not bool or type(item["page"]) is not int:
+                    raise ValueError
+                seen.add(field_id)
+                if any(type(item[key]) not in (int, float) for key in ("x", "y", "width", "height")):
+                    raise ValueError
+                field = AgreementField(
+                    id=field_id, agreement=agreement, agreement_pdf_sha256=self.pdf_sha256,
+                    field_type=item["type"], label=item["label"], required=item["required"],
+                    role=item["role"], page_number=item["page"], x=item["x"], y=item["y"],
+                    width=item["width"], height=item["height"],
+                )
+                field.full_clean(validate_unique=False, validate_constraints=False)
+            except (ValidationError, ValueError, TypeError, AttributeError) as error:
+                detail = " ".join(error.messages) if isinstance(error, ValidationError) else "Check its type, role, page and bounds."
+                errors.append(f"Field {index}: {detail}")
+        if not errors:
+            for role in ["client"] + (["company"] if "company" in self.roles else []):
+                if not any(item["role"] == role and item["type"] == "signature" and item["required"] for item in self.fields):
+                    errors.append(f"Add at least one required {role} signature field, save the draft, then publish again.")
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError("Published versions cannot be edited. Publish a new draft revision.")
+        self.full_clean()
+        kwargs["force_insert"] = True
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Published versions must be preserved.")

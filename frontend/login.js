@@ -97,6 +97,7 @@ class LoginController {
         : { email: document.querySelector('#email').value.trim(), password: this.password.value };
       const result = await this.client.request(signingOut ? document.body.dataset.logoutUrl : document.body.dataset.loginUrl, data);
       if (!result.authenticated) return window.location.reload();
+      if (result.dashboardUrl) return window.location.replace(result.dashboardUrl);
       this.form.reset();
       this.setPasswordVisible(false);
       this.showSignedIn();

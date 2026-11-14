@@ -8,12 +8,15 @@ class ClientFileEditor {
     ['client_email', 'clientEmail'],
     ['signer_name', 'signerName'],
     ['signer_email', 'signerEmail'],
+    ['template_version', 'templateVersionId'],
+    ['company_signer_name', 'companySignerName'],
+    ['company_signer_email', 'companySignerEmail'],
   ]);
 
   constructor(form, data) {
     this.form = form;
     this.client = new SessionClient();
-    this.inputs = new Map([...form.querySelectorAll('input[name]')].map(input => [input.name, input]));
+    this.inputs = new Map([...form.querySelectorAll('input[name], select[name]')].map(input => [input.name, input]));
     this.errors = new Map([...this.inputs.keys()].map(name => [name, document.getElementById(`${name}-error`)]));
     this.fields = document.querySelector('#draft-fields');
     this.button = document.querySelector('#save-draft');
@@ -30,12 +33,25 @@ class ClientFileEditor {
     this.companyId = document.body.dataset.companyId;
     this.creationKey = data.creationKey;
     this.isNew = !data.id;
+    this.issued = data.status === 'awaiting_client';
+    this.requestBusy = false;
+    this.sendButton = document.querySelector('#send-demo');
+    this.invitation = null;
+    this.sendButton.addEventListener('click', () => this.requestInvitation());
+    document.querySelector('#demo-replace').addEventListener('click', () => this.requestInvitation(true));
+    document.querySelector('#demo-refresh').addEventListener('click', () => this.loadInvitation());
+    for (const kind of ['link', 'code']) document.querySelector(`#demo-copy-${kind}`).addEventListener('click', () => this.copyInvitation(kind));
+    setInterval(() => this.renderCountdown(), 1000);
     this.checkingSession = false;
     this.sessionReady = false;
     this.saving = false;
     this.dirty = false;
     this.guardingLeave = false;
     this.allowLeave = false;
+    this.templates = new Map();
+    this.templatePage = 1;
+    this.templatesLoading = false;
+    this.templatesStarted = false;
     this.beforeUnload = event => {
       event.preventDefault();
       event.returnValue = '';
@@ -43,6 +59,14 @@ class ClientFileEditor {
     this.applyFile(data);
     this.savedValues = JSON.stringify(this.readValues());
     this.form.addEventListener('input', event => this.handleInput(event));
+    this.inputs.get('template_version').addEventListener('change', event => this.handleInput(event));
+    document.querySelector('#template-load-more').addEventListener('click', () => this.loadTemplates());
+    document.querySelector('#use-client-details').addEventListener('click', () => {
+      for (const suffix of ['name', 'email']) this.inputs.get(`signer_${suffix}`).value = this.inputs.get(`client_${suffix}`).value;
+      this.handleInput({ target: this.inputs.get('signer_name') });
+      this.clearFieldError('signer_email');
+      this.inputs.get('signer_name').focus();
+    });
     this.form.addEventListener('submit', event => this.save(event));
     this.sessionRetry.addEventListener('click', () => this.refreshSession());
     window.addEventListener('pageshow', event => { if (event.persisted) this.refreshSession(); });
@@ -65,12 +89,16 @@ class ClientFileEditor {
   }
 
   applyFile(file) {
+    if (file.selectedTemplate) this.addTemplateOption(file.selectedTemplate);
     for (const [name, value] of Object.entries(this.fileValues(file))) this.inputs.get(name).value = value;
+    this.renderTemplateSetup();
     this.updateFileMetadata(file);
   }
 
   updateFileMetadata(file) {
     if (file.id) {
+      document.body.dataset.requestUrl = file.requestUrl;
+      this.issued = file.status !== 'draft';
       this.heading.textContent = file.clientName;
       document.title = `${file.clientName} · Astra`;
     }
@@ -83,14 +111,26 @@ class ClientFileEditor {
     this.clearFieldError(event.target.name);
     this.saveError.hidden = true;
     this.saveStatus.hidden = true;
+    if (event.target.name === 'template_version' && !this.selectedTemplate()?.roles.includes('company')) {
+      for (const name of ['company_signer_name', 'company_signer_email']) {
+        this.inputs.get(name).value = '';
+        this.clearFieldError(name);
+      }
+    }
+    this.renderTemplateSetup();
     this.dirty = JSON.stringify(this.readValues()) !== this.savedValues;
     this.updateState();
   }
 
   updateState() {
-    const busy = this.checkingSession || this.saving;
-    this.fields.disabled = busy || !this.sessionReady;
-    this.button.disabled = busy || !this.sessionReady || (!this.isNew && !this.dirty);
+    const busy = this.checkingSession || this.saving || this.requestBusy;
+    this.fields.disabled = busy || !this.sessionReady || this.issued;
+    this.button.disabled = busy || !this.sessionReady || this.issued || (!this.isNew && !this.dirty);
+    this.sendButton.disabled = busy || !this.sessionReady || this.isNew || this.dirty;
+    this.sendButton.textContent = this.requestBusy ? 'Checking request…' : 'Send request — Demo';
+    this.sendButton.setAttribute('aria-busy', String(this.requestBusy));
+    document.querySelector('#demo-replace').disabled = busy || !this.sessionReady;
+    document.querySelector('#demo-refresh').disabled = busy || !this.sessionReady;
     this.buttonLabel.textContent = this.saving ? 'Saving…' : this.checkingSession ? 'Checking session…' : 'Save draft';
     this.button.setAttribute('aria-busy', String(busy));
     this.form.setAttribute('aria-busy', String(busy));
@@ -121,7 +161,7 @@ class ClientFileEditor {
       const value = input.value.trim();
       let message = '';
       if (input.required && !value) message = name === 'reference' ? 'Enter a file reference.' : 'Enter the client’s name.';
-      else if (value.length > input.maxLength) message = `Use ${input.maxLength} characters or fewer.`;
+      else if (input.maxLength > 0 && value.length > input.maxLength) message = `Use ${input.maxLength} characters or fewer.`;
       else if (!input.validity.valid) message = input.type === 'email' ? 'Enter a valid email address, or leave this field blank.' : 'Check this value.';
       if (!message) continue;
       this.showFieldError(name, message);
@@ -144,6 +184,11 @@ class ClientFileEditor {
         return;
       }
       this.sessionReady = true;
+      if (!this.isNew) await this.loadInvitation();
+      if (!this.templatesStarted) {
+        this.templatesStarted = true;
+        this.loadTemplates();
+      }
     } catch (error) {
       this.sessionReady = false;
       this.showSessionError(`${error.message} Your entered details are still here. Sign in if needed, then select Try again to continue saving.`);
@@ -156,9 +201,88 @@ class ClientFileEditor {
 
   showSessionError(message) {
     this.sessionReady = false;
+    this.invitation = null;
+    document.querySelector('#demo-invitation').hidden = true;
+    document.querySelector('#demo-code').value = '';
     document.querySelector('#draft-session-error-message').textContent = message;
     this.sessionError.hidden = false;
     this.sessionError.scrollIntoView({ block: 'nearest' });
+  }
+
+  selectedTemplate() {
+    return this.templates.get(this.inputs.get('template_version').value);
+  }
+
+  addTemplateOption(version) {
+    this.templates.set(version.id, version);
+    const select = this.inputs.get('template_version');
+    if (![...select.options].some(option => option.value === version.id)) {
+      select.add(new Option(`${version.name} · Version ${version.number}`, version.id));
+    }
+  }
+
+  renderTemplateSetup() {
+    const version = this.selectedTemplate();
+    document.querySelector('#company-signer-section').hidden = !version?.roles.includes('company');
+    const preview = document.querySelector('#selected-template-preview');
+    preview.hidden = !version;
+    if (version) preview.href = version.previewUrl;
+    const issues = [];
+    if (!version) issues.push('Select a published template version.');
+    else {
+      if (!this.inputs.get('signer_name').value.trim()) issues.push("Add the client signer's name.");
+      if (!this.inputs.get('signer_email').value.trim()) issues.push("Add the client signer's email.");
+      if (version.roles.includes('company')) {
+        if (!this.inputs.get('company_signer_name').value.trim()) issues.push("Add the company countersigner's name.");
+        if (!this.inputs.get('company_signer_email').value.trim()) issues.push("Add the company countersigner's email.");
+      }
+    }
+    const list = document.querySelector('#agreement-setup-issues');
+    list.replaceChildren();
+    for (const message of issues.length ? issues : [this.issued ? 'Request issued. The selected version and recipients are fixed.' : 'Signer setup details are present. No request has been created.']) {
+      const item = document.createElement('li');
+      item.textContent = message;
+      list.append(item);
+    }
+  }
+
+  async loadTemplates() {
+    if (this.templatesLoading) return;
+    this.templatesLoading = true;
+    const button = document.querySelector('#template-load-more');
+    const status = document.querySelector('#template-version-status');
+    const errorElement = document.querySelector('#template-list-error');
+    button.disabled = true;
+    errorElement.hidden = true;
+    status.textContent = 'Loading published versions…';
+    try {
+      const url = new URL(document.body.dataset.templatesUrl, location.origin);
+      url.search = new URLSearchParams({ workspace_id: this.companyId, page: this.templatePage });
+      const result = await this.client.request(url);
+      if (result.companyId !== this.companyId) throw new Error('Your workspace has changed. Sign in to this file’s workspace and retry.');
+      for (const version of result.versions) this.addTemplateOption(version);
+      this.templatePage = result.pagination.number + 1;
+      button.hidden = !result.pagination.hasNext;
+      button.textContent = 'Load more versions';
+      status.textContent = result.pagination.total
+        ? `${this.templates.size} of ${result.pagination.total} published versions loaded. Select a specific version; it will stay fixed.`
+        : 'No published versions yet. Publish an agreement under Agreement templates, then reload this list.';
+      if (!result.pagination.total) {
+        button.hidden = false;
+        button.textContent = 'Refresh published versions';
+        this.templatePage = 1;
+      }
+      this.renderTemplateSetup();
+    } catch (error) {
+      status.textContent = 'Published versions could not be loaded. You can still save an incomplete draft.';
+      errorElement.textContent = `${error.message} Your current selection and entered details are still here.`;
+      errorElement.hidden = false;
+      button.hidden = false;
+      button.textContent = 'Retry loading versions';
+    } finally {
+      this.templatesLoading = false;
+      button.disabled = false;
+    }
   }
 
   async save(event) {
@@ -220,6 +344,108 @@ class ClientFileEditor {
       this.saving = false;
       this.updateState();
       firstInvalid?.focus();
+    }
+  }
+
+  async loadInvitation() {
+    if (this.isNew || this.requestBusy) return;
+    this.requestBusy = true;
+    this.updateState();
+    try {
+      const result = await this.client.request(document.body.dataset.requestUrl);
+      this.renderInvitation(result.invitation);
+      document.querySelector('#demo-error').hidden = true;
+    } catch (error) {
+      this.requestError(error);
+    } finally {
+      this.requestBusy = false;
+      this.updateState();
+    }
+  }
+
+  async requestInvitation(replace = false) {
+    if (this.sendButton.disabled || this.requestBusy) return;
+    this.requestBusy = true;
+    this.updateState();
+    document.querySelector('#demo-error').hidden = true;
+    document.querySelector('#demo-status').textContent = replace ? 'Generating a replacement code…' : 'Checking setup and issuing the request…';
+    const payload = { workspace_id: this.companyId };
+    if (replace) payload.replaceInvitationId = this.invitation.invitationId;
+    try {
+      const result = await this.client.request(document.body.dataset.requestUrl, payload);
+      this.renderInvitation(result.invitation);
+    } catch (error) {
+      this.requestError(error);
+    } finally {
+      this.requestBusy = false;
+      this.updateState();
+    }
+  }
+
+  requestError(error) {
+    const element = document.querySelector('#demo-error');
+    element.textContent = error.message;
+    element.hidden = false;
+    document.querySelector('#demo-status').textContent = 'Request not confirmed. Retry or refresh status to recover the existing request.';
+    if ([401, 403].includes(error.status) || error.code === 'workspace_changed') this.showSessionError(error.message);
+  }
+
+  renderInvitation(invitation) {
+    this.invitation = invitation;
+    document.querySelector('#demo-invitation').hidden = !invitation;
+    if (!invitation) return;
+    this.issued = true;
+    document.querySelector('#file-status').textContent = ({ awaiting_company: 'Awaiting company', finalizing: 'Finalizing' })[invitation.progress] || 'Awaiting client';
+    document.querySelector('#demo-send-hint').textContent = 'Request issued. The selected agreement and recipients are fixed. Repeating Send recovers this same request.';
+    this.renderTemplateSetup();
+    document.querySelector('#demo-link').value = new URL(invitation.link, location.origin).href;
+    document.querySelector('#demo-open').href = invitation.link;
+    document.querySelector('#demo-code').value = invitation.code || '';
+    document.querySelector('#demo-copy-code').disabled = !invitation.code;
+    document.querySelector('#demo-replace').hidden = !invitation.canReplace;
+    this.remainingAtLoad = Date.parse(invitation.expiresAt) - Date.parse(invitation.serverNow);
+    this.countdownStarted = performance.now();
+    const messages = {
+      pending: 'Request created · awaiting client. Opening the link still requires code verification.',
+      expired: 'Code expired. Get a replacement code for this same request.',
+      locked: 'Code locked after unsuccessful attempts. Get a replacement code for this same request.',
+      verified: 'Access verified. No signature has been recorded. A replacement code lets you verify again if your session has ended.',
+      replaced: 'This code was replaced. Refresh status to load the current invitation.',
+      submitted: invitation.progress === 'awaiting_company' ? 'Client submission recorded. Awaiting company countersignature; this file is not complete.' : 'Client submission recorded. Final document generation is pending; this file is not complete.',
+      request_expired: 'This signing request has expired. Contact the company; a replacement code cannot extend it.',
+    };
+    document.querySelector('#demo-status').textContent = messages[invitation.state];
+    this.renderCountdown();
+  }
+
+  renderCountdown() {
+    if (!this.invitation) return;
+    const seconds = Math.max(0, Math.ceil((this.remainingAtLoad - (performance.now() - this.countdownStarted)) / 1000));
+    const expiry = document.querySelector('#demo-expiry');
+    expiry.textContent = this.invitation.state === 'submitted' ? 'Client submission recorded. Invitation verification is no longer a signing action.'
+      : this.invitation.state === 'request_expired' ? 'Request expired. Replacement codes cannot extend its deadline.'
+      : this.invitation.state === 'verified' ? 'Code already used. Your verified session has its own expiry.'
+      : this.invitation.state === 'locked' ? 'Code locked. Verification is unavailable with this code.'
+      : seconds ? `Code expires in ${Math.floor(seconds / 3600)}h ${Math.floor(seconds / 60) % 60}m ${seconds % 60}s · ${this.dateFormat.format(Date.parse(this.invitation.expiresAt))}`
+      : 'Code expired. The server requires a replacement code.';
+    if (!seconds && this.invitation.state === 'pending') {
+      this.invitation.state = 'expired';
+      document.querySelector('#demo-code').value = '';
+      document.querySelector('#demo-copy-code').disabled = true;
+      document.querySelector('#demo-replace').hidden = false;
+      document.querySelector('#demo-status').textContent = 'Code expired. Get a replacement code for this same request.';
+    }
+  }
+
+  async copyInvitation(kind) {
+    const input = document.querySelector(`#demo-${kind}`);
+    try {
+      await navigator.clipboard.writeText(input.value);
+      document.querySelector('#demo-status').textContent = `${kind === 'link' ? 'Link' : 'Code'} copied.`;
+    } catch {
+      input.focus();
+      input.select();
+      document.querySelector('#demo-status').textContent = 'Copy is unavailable. The value is selected; use your device’s copy command.';
     }
   }
 }

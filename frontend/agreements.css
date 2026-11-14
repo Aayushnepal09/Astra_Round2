@@ -79,3 +79,11 @@
 .agreement-save-actions .has-error { color: #9c3028; }
 .agreement-field-properties input, .agreement-field-properties select { min-width: 0; width: 100%; }
 .agreement-field-properties input[type="checkbox"] { width: auto; }
+.agreement-publish-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-bottom: 8px; }
+.agreement-publish-controls label { display: grid; flex: 1 1 230px; gap: 7px; font-size: 12px; color: var(--ink); }
+.agreement-publish-controls input { width: 100%; min-height: 42px; padding: 10px; border: 1px solid #bed0e8; border-radius: var(--radius); background: var(--surface); color: var(--ink); }
+.agreement-published-versions { margin: 16px 0; padding: 14px 0; border-top: 1px solid var(--line); }
+.agreement-published-versions h4 { margin: 0 0 7px; font-size: 13px; }
+.agreement-published-versions ul { display: grid; gap: 10px; padding-left: 18px; font-size: 12px; }
+.agreement-published-versions a { color: var(--blue); text-underline-offset: 3px; }
+#agreement-publish-status { font-size: 12px; line-height: 1.6; }

@@ -41,8 +41,11 @@ class CompanyFileWorkspace:
     @staticmethod
     def draft(file):
         saved = not file._state.adding
+        version = file.template_version if file.template_version_id else None
         return {
             "id": str(file.pk) if saved else None,
+            "status": file.status,
+            "statusLabel": file.get_status_display(),
             "creationKey": str(file.creation_key),
             "reference": file.reference,
             "title": file.title,
@@ -50,8 +53,18 @@ class CompanyFileWorkspace:
             "clientEmail": file.client_email,
             "signerName": file.signer_name,
             "signerEmail": file.signer_email,
+            "templateVersionId": str(version.pk) if version else "",
+            "selectedTemplate": {
+                "id": str(version.pk), "name": version.name, "number": version.number,
+                "roles": version.roles,
+                "previewUrl": f'{reverse("company_dashboard")}#templates/published/{version.pk}',
+            } if version else None,
+            "companySignerName": file.company_signer_name,
+            "companySignerEmail": file.company_signer_email,
+            "setupIssues": file.setup_issues(),
             "updatedAt": file.updated_at.isoformat() if saved else None,
             "detailUrl": reverse("company_file_detail", args=[file.pk]) if saved else None,
+            "requestUrl": reverse("company_file_request", args=[file.pk]) if saved else None,
         }
 
     def snapshot(self, params=None):
