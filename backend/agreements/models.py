@@ -71,6 +71,7 @@ class Agreement(models.Model):
     conversion_engine = models.CharField(max_length=100, blank=True, editable=False)
     conversion_version = models.CharField(max_length=100, blank=True, editable=False)
     validated_at = models.DateTimeField(null=True, blank=True, editable=False)
+    fields_revision = models.PositiveIntegerField(default=0, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -251,3 +252,88 @@ class Agreement(models.Model):
                 force_insert=force_insert or self._state.adding,
                 force_update=force_update, using=using, update_fields=update_fields,
             )
+
+
+class AgreementField(models.Model):
+    class FieldType(models.TextChoices):
+        NAME = "name", "Name"
+        TEXT = "text", "Text"
+        DATE = "date", "Date"
+        SIGNATURE = "signature", "Signature"
+        INITIALS = "initials", "Initials"
+        ACKNOWLEDGEMENT = "acknowledgement", "Acknowledgement"
+
+    class Role(models.TextChoices):
+        CLIENT = "client", "Client"
+        COMPANY = "company", "Company"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    agreement = models.ForeignKey(
+        Agreement, on_delete=models.CASCADE, related_name="fields",
+        editable=False,
+    )
+    agreement_pdf_sha256 = models.CharField(
+        max_length=64, validators=[Agreement.hash_validator], editable=False,
+    )
+    field_type = models.CharField(max_length=20, choices=FieldType.choices)
+    label = models.CharField(max_length=120, blank=True)
+    required = models.BooleanField(default=False)
+    role = models.CharField(max_length=8, choices=Role.choices)
+    page_number = models.PositiveIntegerField()
+    x = models.FloatField()
+    y = models.FloatField()
+    width = models.FloatField()
+    height = models.FloatField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["page_number", "y", "x", "id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(page_number__gt=0),
+                name="agreement_field_positive_page",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(x__gte=0, y__gte=0, width__gt=0, height__gt=0)
+                    & models.Q(x__lte=1, y__lte=1, width__lte=1, height__lte=1)
+                ),
+                name="agreement_field_normalized_bounds",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["agreement", "page_number", "y", "x"],
+                name="agreement_field_position",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        self.label = self.label.strip() if isinstance(self.label, str) else self.label
+        if self.agreement_id:
+            agreement = self.agreement
+            if agreement.processing_state != Agreement.ProcessingState.READY:
+                errors["agreement"] = "Fields require a validated agreement."
+            elif self.agreement_pdf_sha256 != agreement.pdf_sha256:
+                errors["agreement_pdf_sha256"] = "Fields must belong to the current agreement PDF."
+            elif type(self.page_number) is not int or not 1 <= self.page_number <= agreement.page_count:
+                errors["page_number"] = "Choose a page in the agreement."
+            elif not all(
+                isinstance(value, (int, float)) and not isinstance(value, bool)
+                for value in (self.x, self.y, self.width, self.height)
+            ) or not (
+                0 <= self.x < 1 and 0 <= self.y < 1
+                and 0 < self.width <= 1 and 0 < self.height <= 1
+                and self.x + self.width <= 1
+                and self.y + self.height <= 1
+            ):
+                errors["x"] = "Field coordinates must stay within the page."
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)

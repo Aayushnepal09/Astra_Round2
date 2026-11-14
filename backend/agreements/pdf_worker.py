@@ -98,7 +98,7 @@ def rasterize(page, edge, *, encode):
         raise InvalidDocument("invalid_page")
     with closing(page.render(
         scale=scale, draw_annots=True, may_draw_forms=True,
-        rev_byteorder=True, prefer_bgrx=True, limit_image_cache=True,
+        rev_byteorder=True, prefer_bgrx=False, limit_image_cache=True,
     )) as bitmap:
         with bitmap.to_pil() as image:
             image.load()

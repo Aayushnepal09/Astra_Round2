@@ -18,7 +18,7 @@ class PdfProcessor:
     errors = {
         "empty": "This file is empty. Choose a PDF containing at least one page.",
         "oversized": "This PDF exceeds the upload size limit. Choose a smaller PDF.",
-        "unsupported": "Only PDF documents are supported. Export your agreement as a PDF and try again.",
+        "unsupported": "This is not a supported PDF or DOCX document. Export a fresh PDF or DOCX and try again.",
         "encrypted": "This PDF is encrypted or password-protected. Export an unprotected copy and upload it again.",
         "corrupt": "This PDF is damaged or incomplete. Open it in a PDF editor, export a fresh copy, and try again.",
         "no_pages": "This PDF contains no pages. Choose a PDF containing at least one page.",

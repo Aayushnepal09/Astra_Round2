@@ -1,18 +1,22 @@
+import json
+import math
 import uuid
 from urllib.parse import unquote
 
 from django.conf import settings
 from django.core.exceptions import SuspiciousFileOperation, ValidationError
 from django.core.paginator import Paginator
-from django.db import DatabaseError
+from django.db import DatabaseError, transaction
+from django.db.models import F
 from django.http import HttpResponse, JsonResponse
 from django.http.request import UnreadablePostError
 from django.urls import reverse
+from django.utils import timezone
 from django.views import View
 
 from login.common import auth_error, company_authenticated
 
-from .models import Agreement
+from .models import Agreement, AgreementField
 from .processing import DocumentError, PdfProcessor
 from .storage import PrivateDocumentStorage
 from .uploads import AgreementUpload
@@ -27,6 +31,26 @@ def agreement_data(agreement):
         "processingLabel": agreement.get_processing_state_display(),
         "processingError": agreement.processing_error,
         "pageCount": agreement.page_count,
+        "format": agreement.detected_format,
+        "conversionEngine": agreement.conversion_engine,
+        "conversionVersion": agreement.conversion_version,
+        "pdfSha256": agreement.pdf_sha256,
+        "fieldsRevision": agreement.fields_revision,
+        "fields": [
+            {
+                "id": str(field.pk),
+                "type": field.field_type,
+                "label": field.label,
+                "required": field.required,
+                "role": field.role,
+                "page": field.page_number,
+                "x": field.x,
+                "y": field.y,
+                "width": field.width,
+                "height": field.height,
+            }
+            for field in agreement.fields.all()
+        ],
         "createdAt": agreement.created_at.isoformat(),
         "detailUrl": reverse("company_agreement_detail", args=[agreement.pk]),
         "pageUrl": reverse("company_agreement_page", args=[agreement.pk, 1]).removesuffix("1/"),
@@ -75,13 +99,16 @@ class CompanyAgreementList(CompanyAgreementAccessMixin, View):
 class CompanyAgreementUpload(CompanyAgreementAccessMixin, View):
     def post(self, request):
         # A raw file body lets us enforce the byte cap before multipart buffering.
-        if request.content_type not in ("application/pdf", "application/octet-stream"):
-            return auth_error("Upload a PDF file. DOCX conversion is not supported yet.", status=415)
+        if request.content_type not in (
+            "application/pdf", "application/octet-stream",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ):
+            return auth_error("Upload a PDF or DOCX file.", status=415)
         try:
             creation_key = uuid.UUID(request.headers.get("X-Upload-Key", ""))
             filename = unquote(request.headers.get("X-Upload-Filename", ""), errors="strict").strip()
         except (ValueError, UnicodeError):
-            return auth_error("Choose the PDF again before uploading.")
+            return auth_error("Choose the document again before uploading.")
         if (
             not filename or len(filename) > 255
             or any(character in "/\\" or ord(character) < 32 or ord(character) == 127 for character in filename)
@@ -90,7 +117,7 @@ class CompanyAgreementUpload(CompanyAgreementAccessMixin, View):
         content_length = request.META.get("CONTENT_LENGTH", "")
         if content_length.isdecimal() and int(content_length) > settings.AGREEMENT_MAX_BYTES:
             limit = settings.AGREEMENT_MAX_BYTES / (1024 * 1024)
-            return JsonResponse({"error": f"This file is too large. Choose a PDF up to {limit:g} MiB.", "code": "oversized"}, status=413)
+            return JsonResponse({"error": f"This file is too large. Choose a PDF or DOCX up to {limit:g} MiB.", "code": "oversized"}, status=413)
         try:
             agreement, created = AgreementUpload(request.user).save(
                 iter(lambda: request.read(64 * 1024), b""),
@@ -133,3 +160,111 @@ class CompanyAgreementPage(CompanyAgreementAccessMixin, View):
         except (OSError, SuspiciousFileOperation):
             return auth_error("The saved PDF is temporarily unavailable. Try loading the preview again.", status=503)
         return HttpResponse(png, content_type="image/png")
+
+
+class CompanyAgreementFields(CompanyAgreementAccessMixin, View):
+    def post(self, request, agreement_id):
+        agreement = Agreement.objects.filter(company=request.user, pk=agreement_id).first()
+        if agreement is None:
+            return auth_error("Agreement not found in this workspace.", status=404)
+        if agreement.processing_state != Agreement.ProcessingState.READY:
+            return auth_error("Fields require a validated agreement.", status=409)
+        try:
+            raw = request.read(256 * 1024 + 1)
+            if len(raw) > 256 * 1024:
+                return auth_error("This field draft is too large. Use at most 200 fields with short labels.", status=413)
+            payload = json.loads(raw)
+        except (ValueError, UnicodeDecodeError, UnreadablePostError):
+            return auth_error("Send a valid field draft.")
+        if not isinstance(payload, dict) or not isinstance(payload.get("fields"), list):
+            return auth_error("Send a valid field draft.")
+        if payload.get("pdfSha256") != agreement.pdf_sha256:
+            return auth_error("This draft belongs to a different PDF. Reopen the correct agreement before saving.", status=409)
+        revision = payload.get("revision")
+        if type(revision) is not int or not 0 <= revision <= 2147483647:
+            return auth_error("Reopen the agreement to load its current field draft before saving.", status=409)
+        submitted = payload["fields"]
+        if len(submitted) > 200:
+            return auth_error("This preparation draft has too many fields.")
+
+        fields = []
+        seen_ids = set()
+        for item in submitted:
+            if not isinstance(item, dict):
+                return auth_error("Each field must be an object.")
+            if set(item) != {
+                "id", "type", "label", "required", "role",
+                "page", "x", "y", "width", "height",
+            }:
+                return auth_error("A field is missing required properties.")
+            try:
+                field_id = uuid.UUID(str(item["id"]))
+            except (ValueError, TypeError, AttributeError):
+                return auth_error("Each field needs a valid identifier.")
+            if field_id in seen_ids:
+                return auth_error("Field identifiers must be unique.")
+            seen_ids.add(field_id)
+            if (
+                type(item["required"]) is not bool
+                or not isinstance(item["label"], str)
+                or len(item["label"].strip()) > 120
+                or item["type"] not in AgreementField.FieldType.values
+                or item["role"] not in AgreementField.Role.values
+                or type(item["page"]) is not int
+                or not all(
+                    isinstance(item[key], (int, float))
+                    and not isinstance(item[key], bool)
+                    and 0 <= item[key] <= 1
+                    and math.isfinite(item[key])
+                    for key in ("x", "y", "width", "height")
+                )
+            ):
+                return auth_error("A field has an invalid type, label, role, or value.")
+            fields.append(AgreementField(
+                id=field_id,
+                agreement=agreement,
+                agreement_pdf_sha256=agreement.pdf_sha256,
+                field_type=item["type"],
+                label=item["label"].strip(),
+                required=item["required"],
+                role=item["role"],
+                page_number=item["page"],
+                x=item["x"],
+                y=item["y"],
+                width=item["width"],
+                height=item["height"],
+            ))
+        try:
+            if AgreementField.objects.filter(pk__in=seen_ids).exclude(agreement=agreement).exists():
+                return auth_error("A field identifier is unavailable. Reopen the agreement and add the field again.", status=409)
+            for field in fields:
+                # UUIDs already saved in this draft are deliberately reused.
+                field.full_clean(validate_unique=False)
+        except ValidationError as error:
+            message = next(iter(error.messages), "A field is outside the page boundaries.")
+            return auth_error(message, status=422)
+        with transaction.atomic():
+            # Compare-and-swap also protects SQLite, where row locks are unavailable.
+            changed = Agreement.objects.filter(
+                pk=agreement.pk, company=request.user, fields_revision=revision,
+                pdf_sha256=payload["pdfSha256"], processing_state=Agreement.ProcessingState.READY,
+            ).update(fields_revision=F("fields_revision") + 1, updated_at=timezone.now())
+            if not changed:
+                agreement.refresh_from_db()
+                current = agreement_data(agreement)
+                proposed = [dict(item, label=item["label"].strip(), id=str(uuid.UUID(str(item["id"])))) for item in submitted]
+                if sorted(current["fields"], key=lambda item: item["id"]) == sorted(proposed, key=lambda item: item["id"]):
+                    # A previous save may have succeeded before its response was lost.
+                    return JsonResponse({"companyId": str(request.user.pk), "agreement": current})
+                return JsonResponse({
+                    "error": "Another tab saved this draft. Your changes are still here. Reopen the agreement to load the saved version before editing again.",
+                    "code": "draft_conflict",
+                }, status=409)
+            AgreementField.objects.filter(agreement=agreement).delete()
+            AgreementField.objects.bulk_create(fields)
+            agreement.fields_revision = revision + 1
+            result = agreement_data(agreement)
+        return JsonResponse({
+            "companyId": str(request.user.pk),
+            "agreement": result,
+        })

@@ -8,6 +8,7 @@ from django.db import DatabaseError
 from django.utils import timezone
 
 from .models import Agreement
+from .docx import DocxConverter
 from .processing import DocumentError, PdfProcessor
 from .storage import PrivateDocumentStorage
 
@@ -37,15 +38,24 @@ class AgreementUpload:
                     size += len(chunk)
                     if size > settings.AGREEMENT_MAX_BYTES:
                         limit = settings.AGREEMENT_MAX_BYTES / (1024 * 1024)
-                        raise DocumentError(f"This file is too large. Choose a PDF up to {limit:g} MiB.", "oversized")
+                        raise DocumentError(f"This file is too large. Choose a PDF or DOCX up to {limit:g} MiB.", "oversized")
                     destination.write(chunk)
             if not size:
-                raise DocumentError("This file is empty. Choose a PDF containing at least one page.", "empty")
+                raise DocumentError("This file is empty. Choose a PDF or DOCX containing at least one page.", "empty")
 
-            geometry = self.processor.validate(path)
+            with path.open("rb") as source_file:
+                is_docx = source_file.read(4) == b"PK\x03\x04"
+            pdf_path = path
+            engine = version = ""
+            if is_docx:
+                pdf_path = Path(directory) / "converted.pdf"
+                engine, version = DocxConverter().convert(path, pdf_path)
+            geometry = self.processor.validate(pdf_path)
             agreement = Agreement(
                 company=self.company, creation_key=creation_key,
-                original_filename=filename, detected_format=Agreement.Format.PDF,
+                original_filename=filename,
+                detected_format=Agreement.Format.DOCX if is_docx else Agreement.Format.PDF,
+                conversion_engine=engine, conversion_version=version,
                 processing_state=Agreement.ProcessingState.READY,
                 page_count=len(geometry), page_geometry=geometry,
                 validated_at=timezone.now(),
@@ -56,17 +66,29 @@ class AgreementUpload:
                     iter(lambda: original.read(64 * 1024), b""),
                     max_bytes=settings.AGREEMENT_MAX_BYTES,
                 )
-            agreement.original_key = agreement.pdf_key = artifact.key
-            agreement.original_sha256 = agreement.pdf_sha256 = artifact.sha256
-            agreement.original_size_bytes = agreement.pdf_size_bytes = artifact.size_bytes
+            agreement.original_key = artifact.key
+            agreement.original_sha256 = artifact.sha256
+            agreement.original_size_bytes = artifact.size_bytes
+            pdf_artifact = artifact
             try:
+                if is_docx:
+                    with pdf_path.open("rb") as converted:
+                        pdf_artifact = storage.write(
+                            iter(lambda: converted.read(64 * 1024), b""),
+                            max_bytes=settings.AGREEMENT_MAX_BYTES,
+                        )
+                agreement.pdf_key = pdf_artifact.key
+                agreement.pdf_sha256 = pdf_artifact.sha256
+                agreement.pdf_size_bytes = pdf_artifact.size_bytes
                 agreement.save()
-            except (ValidationError, DatabaseError):
+            except (ValidationError, DatabaseError, OSError, ValueError):
                 # A lost database acknowledgement may still have committed.
                 # Keep the artifact if the database cannot resolve that outcome.
                 winner = self._existing(creation_key)
                 if winner is None or winner.original_key != artifact.key:
                     self._cleanup(storage, artifact.key)
+                    if pdf_artifact.key != artifact.key:
+                        self._cleanup(storage, pdf_artifact.key)
                 if winner is not None:
                     return winner, False
                 raise

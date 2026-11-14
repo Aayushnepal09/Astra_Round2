@@ -122,6 +122,10 @@ class WorkspaceDashboard {
     view = view.split('/')[0];
     if (!WorkspaceDashboard.views.has(view)) view = 'overview';
     if (view !== 'templates') route = view;
+    if (!this.agreements.canNavigate(route)) {
+      window.history.replaceState(null, '', `#${this.agreements.route || 'templates'}`);
+      return;
+    }
     const current = WorkspaceDashboard.views.get(view);
     document.querySelectorAll('.workspace-view').forEach(section => { section.hidden = section.id !== `view-${view}`; });
     document.querySelectorAll('.sidebar .nav-link').forEach(link => {
@@ -274,6 +278,8 @@ class WorkspaceDashboard {
   async logout() {
     const button = document.querySelector('.logout-button');
     if (button.disabled) return;
+    if (!this.agreements.confirmLeave()) return;
+    this.agreements.fieldsDirty = false;
     this.agreements.dispose();
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
