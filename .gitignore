@@ -7,3 +7,5 @@ __pycache__/
 /backend/.local/
 *.sqlite3
 *.sqlite3-*
+/dist/
+/deploy/astra.env
