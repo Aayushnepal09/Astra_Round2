@@ -4,6 +4,8 @@ from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 
+from local_config import groq_api_key
+
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / ".local"
@@ -97,3 +99,6 @@ CLIENT_SESSION_IDLE = 30 * 60
 CLIENT_SESSION_MAX = 2 * 60 * 60
 COMPANY_LOGIN_MAX_ATTEMPTS = 5
 COMPANY_LOGIN_WINDOW = 15 * 60
+
+# Free-plan assistance is optional and never falls back to paid service.
+ASSISTANT_GROQ_API_KEY = groq_api_key(BASE_DIR.parent / ".env")
