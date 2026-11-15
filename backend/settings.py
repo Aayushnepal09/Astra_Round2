@@ -102,3 +102,13 @@ COMPANY_LOGIN_WINDOW = 15 * 60
 
 # Free-plan assistance is optional and never falls back to paid service.
 ASSISTANT_GROQ_API_KEY = groq_api_key(BASE_DIR.parent / ".env")
+ASSISTANT_MODEL = "openai/gpt-oss-20b"
+ASSISTANT_QUESTION_MAX_CHARS = 2000
+ASSISTANT_INPUT_MAX_BYTES = 14000
+ASSISTANT_MAX_COMPLETION_TOKENS = 1000
+ASSISTANT_TIMEOUT = 30
+ASSISTANT_DAILY_CALLS = 25
+# Below Groq's published Free Plan limits (30 RPM, 8K TPM, 200K TPD).
+# Byte-based token estimates are conservative estimates, not an exact tokenizer.
+ASSISTANT_REQUESTS_PER_MINUTE = 6
+ASSISTANT_TOKENS_PER_MINUTE = 7200

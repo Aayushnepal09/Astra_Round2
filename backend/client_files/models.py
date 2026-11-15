@@ -224,6 +224,14 @@ class SigningSubmission(models.Model):
         raise ValidationError("Accepted signing submissions must be preserved.")
 
 
+class AssistantBudget(models.Model):
+    # Shared admission across all companies and web processes using this database.
+    provider = models.CharField(max_length=32, primary_key=True)
+    day = models.DateField()
+    calls = models.PositiveIntegerField(default=0)
+    next_at = models.DateTimeField()
+
+
 class SigningCompletionQuerySet(models.QuerySet):
     def update(self, **kwargs):
         raise ValidationError("Use the finalization service to update completion records.")
