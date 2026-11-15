@@ -4,6 +4,7 @@ from .views import (
     CompanyAgreementDetail, CompanyAgreementList, CompanyAgreementPage,
     CompanyAgreementUpload, CompanyAgreementFields,
     CompanyTemplatePublish, CompanyTemplateList, CompanyTemplateDetail, CompanyTemplatePage,
+    CompanyFieldSuggestions,
 )
 
 
@@ -16,5 +17,6 @@ urlpatterns = [
     path("<uuid:agreement_id>/", CompanyAgreementDetail.as_view(), name="company_agreement_detail"),
     path("<uuid:agreement_id>/pages/<int:page_number>/", CompanyAgreementPage.as_view(), name="company_agreement_page"),
     path("<uuid:agreement_id>/fields/", CompanyAgreementFields.as_view(), name="company_agreement_fields"),
+    path("<uuid:agreement_id>/field-suggestions/", CompanyFieldSuggestions.as_view(), name="company_field_suggestions"),
     path("<uuid:agreement_id>/publish/", CompanyTemplatePublish.as_view(), name="company_template_publish"),
 ]

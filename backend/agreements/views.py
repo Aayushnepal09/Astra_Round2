@@ -21,6 +21,8 @@ from .publishing import TemplatePublisher
 from .processing import DocumentError, PdfProcessor
 from .storage import PrivateDocumentStorage
 from .uploads import AgreementUpload
+from .field_suggestions import FieldSuggester
+from client_files.assistant_provider import AssistantError
 
 
 def agreement_data(agreement, *, include_versions=False):
@@ -104,6 +106,36 @@ class CompanyAgreementList(CompanyAgreementAccessMixin, View):
             },
             "limits": {"maxBytes": settings.AGREEMENT_MAX_BYTES, "maxPages": settings.AGREEMENT_MAX_PAGES},
         })
+
+
+class CompanyFieldSuggestions(CompanyAgreementAccessMixin, View):
+    def post(self, request, agreement_id):
+        agreement = Agreement.objects.filter(pk=agreement_id, company=request.user).first()
+        if agreement is None:
+            return auth_error("Agreement not found in this workspace.", status=404)
+        try:
+            payload = read_json(request)
+            if (set(payload) != {"pdfSha256", "revision"} or type(payload["revision"]) is not int
+                    or payload["revision"] != agreement.fields_revision or payload["pdfSha256"] != agreement.pdf_sha256):
+                return JsonResponse({"error": "The saved draft changed. Reopen it before requesting suggestions.", "code": "draft_conflict"}, status=409)
+            if agreement.processing_state != Agreement.ProcessingState.READY:
+                return auth_error("Validate the agreement before requesting suggestions.", status=409)
+            result = FieldSuggester().suggest(agreement)
+            if not Agreement.objects.filter(pk=agreement.pk, company=request.user, fields_revision=payload["revision"],
+                                            pdf_sha256=payload["pdfSha256"]).exists():
+                return JsonResponse({"error": "The saved draft changed while AI was working. Nothing was added; review your draft and retry.", "code": "draft_conflict"}, status=409)
+            return JsonResponse({"companyId": str(request.user.pk), "agreementId": str(agreement.pk),
+                                 "pdfSha256": agreement.pdf_sha256, "revision": agreement.fields_revision, **result})
+        except AssistantError as error:
+            response = JsonResponse({"error": str(error) + " Manual field placement remains available.",
+                                     "code": error.code, "retryAfter": error.retry_after}, status=error.status)
+            if error.retry_after:
+                response["Retry-After"] = str(error.retry_after)
+            return response
+        except (ValueError, RequestDataTooBig, UnreadablePostError):
+            return auth_error("Send the saved PDF identity and draft revision.")
+        except (ValidationError, DocumentError, OSError, SuspiciousFileOperation):
+            return auth_error("The saved PDF could not be read reliably. Nothing was added; place fields manually or retry.", status=422)
 
 
 class CompanyAgreementUpload(CompanyAgreementAccessMixin, View):
