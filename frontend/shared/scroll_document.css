@@ -1,0 +1,13 @@
+.document-page { margin: 0 0 24px; scroll-margin-top: 110px; min-width: 0; }
+.document-page-label { margin: 0 0 8px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.document-page-canvas { position: relative; width: 100%; background: white; color: #18344d; }
+.document-page-canvas > img { display: block; width: 100%; height: 100%; margin: 0; }
+.document-page-canvas > img[hidden] { display: none; }
+.document-page-loading { position: absolute; top: 35%; left: 8%; right: 8%; text-align: center; font-size: 14px; }
+.document-page-retry { position: absolute; top: 50%; left: 12%; }
+.document-page-fields, .document-page-proposals { position: absolute; inset: 0; pointer-events: none; }
+.document-page-proposals { z-index: 2; }
+.document-page-fields button { pointer-events: auto; }
+.document-page-fields[inert] button { pointer-events: none; }
+.document-page [data-highlight="true"] { outline: 3px solid var(--blue, #3166b6); outline-offset: 3px; }
+@media (prefers-reduced-motion: no-preference) { .document-page [data-highlight="true"] { transition: outline-offset .15s ease-out; } }
