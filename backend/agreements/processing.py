@@ -49,9 +49,45 @@ class PdfProcessor:
             raise DocumentError(self.errors["processing_failed"])
         return result
 
+    def extract(self, path):
+        try:
+            pages = json.loads(self._run("extract", path))
+            if (not isinstance(pages, list) or not pages
+                    or len(pages) > settings.AGREEMENT_MAX_PAGES):
+                raise ValueError
+            for number, page in enumerate(pages, 1):
+                if (not isinstance(page, dict) or set(page) != {"page", "text", "status"}
+                        or type(page["page"]) is not int or page["page"] != number
+                        or not isinstance(page["text"], str)
+                        or page["status"] not in ("text", "mixed", "partial", "unreadable")):
+                    raise ValueError
+            return pages
+        except (ValueError, UnicodeDecodeError) as error:
+            raise DocumentError("The agreement text could not be read reliably.", "extraction_failed") from error
+
     def complete(self, path, fields):
         result = self._run("complete", path, fields=fields)
         if not result.startswith(b"%PDF-") or len(result) > settings.AGREEMENT_MAX_BYTES:
+            raise DocumentError(self.errors["processing_failed"])
+        return result
+
+    def field_layout(self, path):
+        try:
+            pages = json.loads(self._run("field_layout", path))
+            if not isinstance(pages, list) or not pages or len(pages) > settings.AGREEMENT_MAX_PAGES:
+                raise ValueError
+            for number, page in enumerate(pages, 1):
+                if (not isinstance(page, dict) or set(page) != {"page", "status", "anchors", "truncated"}
+                        or page["page"] != number or page["status"] not in ("text", "mixed", "partial", "unreadable")
+                        or type(page["truncated"]) is not bool or not isinstance(page["anchors"], list) or len(page["anchors"]) > 60):
+                    raise ValueError
+            return pages
+        except (ValueError, UnicodeDecodeError) as error:
+            raise DocumentError("Field positions could not be read. Place fields manually.", "layout_unavailable") from error
+
+    def render_prepared(self, path, page_number, fields):
+        result = self._run("render_prepared", path, page_number, fields=fields)
+        if not result.startswith(b"\x89PNG\r\n\x1a\n"):
             raise DocumentError(self.errors["processing_failed"])
         return result
 

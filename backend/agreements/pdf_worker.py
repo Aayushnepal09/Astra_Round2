@@ -145,7 +145,39 @@ def process(operation, path, max_bytes, max_pages, edge, page_number):
                     page_geometry(page)
                     return rasterize(page, edge, encode=True)
             pages = []
+            text_bytes = 0
             for index in range(count):
+                if operation in ("extract", "field_layout"):
+                    try:
+                        with closing(document[index]) as page:
+                            page_geometry(page)
+                            with closing(page.get_textpage()) as textpage:
+                                if textpage.count_chars() > max_bytes:
+                                    raise InvalidDocument("resource_limit")
+                                text = textpage.get_text_bounded(errors="replace").replace("\r\n", "\n")
+                            text_bytes += len(text.encode("utf-8"))
+                            if text_bytes > max_bytes:
+                                raise InvalidDocument("resource_limit")
+                            has_unread_content = (raw.FPDFPage_GetAnnotCount(page) > 0 or any(
+                                obj.type in (raw.FPDF_PAGEOBJ_IMAGE, raw.FPDF_PAGEOBJ_FORM)
+                                for obj in page.get_objects()
+                            ))
+                            status = "unreadable" if not text.strip() else (
+                                "partial" if "\ufffd" in text else
+                                "mixed" if has_unread_content or form_type != raw.FORMTYPE_NONE else "text"
+                            )
+                            if operation == "field_layout":
+                                sys.path.insert(0, str(Path(__file__).resolve().parent))
+                                from field_layout import page_anchors
+                                with closing(page.get_textpage()) as layout_text:
+                                    anchors = page_anchors(page, layout_text, index + 1) if status != "unreadable" else []
+                                    truncated = layout_text.count_chars() > 30000 or len(anchors) >= 60
+                                pages.append({"page": index + 1, "status": status, "anchors": anchors, "truncated": truncated})
+                            else:
+                                pages.append({"page": index + 1, "text": text, "status": status})
+                    except pdfium.PdfiumError:
+                        pages.append({"page": index + 1, "status": "unreadable", **({"anchors": [], "truncated": False} if operation == "field_layout" else {"text": ""})})
+                    continue
                 with closing(document[index]) as page:
                     pages.append(page_geometry(page))
                     rasterize(page, edge, encode=False)
@@ -159,15 +191,24 @@ def main():
     try:
         operation, filename, byte_limit, page_limit, edge, page_number, memory_limit, font_path = sys.argv[1:]
         job = limit_memory(int(memory_limit))
-        if operation not in ("validate", "render", "complete"):
+        if operation not in ("validate", "render", "complete", "render_prepared", "extract", "field_layout"):
             raise InvalidDocument("processing_failed")
-        if operation == "complete":
+        if operation in ("complete", "render_prepared"):
             sys.path.insert(0, str(Path(__file__).resolve().parent))
             from completion_worker import complete
             process("validate", Path(filename), int(byte_limit), int(page_limit), int(edge), 0)
             result = complete(Path(filename), json.load(sys.stdin), font_path)
             if len(result) > int(byte_limit):
                 raise InvalidDocument("oversized")
+            if operation == "render_prepared":
+                import pypdfium2 as pdfium
+                with pdfium.PdfDocument(result) as document:
+                    number = int(page_number)
+                    if not 1 <= number <= len(document):
+                        raise InvalidDocument("page_not_found")
+                    with closing(document[number - 1]) as page:
+                        page_geometry(page)
+                        result = rasterize(page, int(edge), encode=True)
         else:
             result = process(
                 operation, Path(filename), int(byte_limit), int(page_limit),

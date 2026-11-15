@@ -48,6 +48,24 @@ def lines_for(text, metrics, size, width):
     return lines
 
 
+def paragraph_lines(text, metrics, size, width):
+    lines, current = [], ''
+    for word in text.split():
+        candidate = f'{current} {word}' if current else word
+        if metrics.getlength(candidate)*size/100 <= width:
+            current = candidate
+        else:
+            if current:
+                lines.append(current)
+            wrapped = lines_for(word, metrics, size, width)
+            if not wrapped:
+                return None
+            lines.extend(wrapped[:-1]); current = wrapped[-1]
+    if current:
+        lines.append(current)
+    return lines
+
+
 def page_matrix(page, u, v):
     left, bottom, right, top = page.get_bbox()
     return {
@@ -69,13 +87,20 @@ def complete(path, fields, configured_font):
         handle = raw.FPDFText_LoadFont(document, buffer, len(data), raw.FPDF_FONT_TRUETYPE, True)
         if not handle:
             fail("font_unavailable")
-        with closing(pdfium.PdfFont(handle, document, needs_free=True)) as font:
+        font = pdfium.PdfFont(handle, document, needs_free=True)
+        document._add_kid(font)
+        with closing(font):
             for index in range(len(document)):
                 with closing(document[index]) as page:
                     width, height = page.get_size()
                     if raw.FPDFPage_Flatten(page, raw.FLAT_NORMALDISPLAY) == raw.FLATTEN_FAIL:
                         fail("processing_failed")
-                    for field in fields:
+                    groups, consumed = [], set()
+                    if any(field['page'] == index+1 and field['type'] in ('name','text','date') and field['height'] < .031 and field.get('value') for field in fields):
+                        from field_layout import inline_group
+                        with closing(page.get_textpage()) as textpage:
+                            groups, consumed = inline_group(page, textpage, index+1, fields)
+                    for field in groups + [field for field in fields if id(field) not in consumed]:
                         if field["page"] != index + 1:
                             continue
                         value = field["value"]
@@ -94,13 +119,25 @@ def complete(path, fields, configured_font):
                         for half_points in range(24, 11, -1):
                             size = half_points / 2
                             line_height = (ascent + descent) * size / 100 * 1.05
-                            lines = lines_for(text, metrics, size, box_width - 2)
+                            lines = (paragraph_lines if field.get('_inline_group') else lines_for)(text, metrics, size, box_width - 2)
                             if lines and len(lines) * line_height <= box_height - 2:
                                 chosen = size, line_height, lines
                                 break
                         if chosen is None:
                             fail("field_overflow")
                         size, line_height, lines = chosen
+                        if field.get('_inline_group'):
+                            # Replace only the original paragraph region in this derived PDF.
+                            # The immutable uploaded PDF and all surrounding content stay intact.
+                            background = raw.FPDFPageObj_CreateNewRect(0, -box_height, box_width, box_height)
+                            if not background:
+                                fail('processing_failed')
+                            raw.FPDFPageObj_SetFillColor(background, 255, 255, 255, 255)
+                            raw.FPDFPath_SetDrawMode(background, raw.FPDF_FILLMODE_WINDING, False)
+                            raw.FPDFPageObj_Transform(background, *page_matrix(page, field['x']*width, field['y']*height))
+                            if not raw.FPDFPage_InsertObject(page, background):
+                                raw.FPDFPageObj_Destroy(background)
+                                fail('processing_failed')
                         for line_index, line in enumerate(lines):
                             if not line:
                                 continue
