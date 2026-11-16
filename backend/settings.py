@@ -28,7 +28,7 @@ ROOT_URLCONF = "urls"
 INSTALLED_APPS = ["django.contrib.auth", "django.contrib.contenttypes", "django.contrib.sessions", "django.contrib.staticfiles", "login", "client_files", "agreements"]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
+    "login.middleware.RoleSessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -78,12 +78,14 @@ USE_TZ = True
 TIME_ZONE = "UTC"
 DATA_UPLOAD_MAX_MEMORY_SIZE = 8192
 SESSION_COOKIE_HTTPONLY = True
-CSRF_COOKIE_HTTPONLY = True
-SESSION_COOKIE_NAME = "astra_session"
-CSRF_COOKIE_NAME = "astra_csrf"
+COMPANY_SESSION_COOKIE_NAME = "astra_company_session"
+COMPANY_SESSION_COOKIE_PATH = "/company/"
+CLIENT_SESSION_COOKIE_NAME = "astra_client_session"
+CLIENT_SESSION_COOKIE_PATH = "/client/"
+# Each role's session owns its CSRF secret, so rotation cannot affect the other.
+CSRF_USE_SESSIONS = True
 SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_SECURE = not DEBUG
 SECURE_SSL_REDIRECT = not DEBUG
 SECURE_CONTENT_TYPE_NOSNIFF = True
 
