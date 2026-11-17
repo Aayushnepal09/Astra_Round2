@@ -9,6 +9,7 @@ from django.utils import timezone
 from login.common import company_authenticated
 from .models import ClientFile, SigningDraft, SigningRecipient, SigningSubmission
 from .submissions import ClientSigning, CONSENT_TEXT, SigningError
+from .lifecycle import lock_file, set_request_status, refresh_file_expiry
 
 
 class CompanySigning(ClientSigning):
@@ -16,10 +17,14 @@ class CompanySigning(ClientSigning):
     def recipient(cls, request, file_id):
         if not company_authenticated(request) or not request.user.is_active:
             raise SigningError("Company sign-in is required. Sign in in a new tab, then check status here.", status=401)
+        file = ClientFile.objects.select_related("current_request").filter(pk=file_id, company=request.user).first()
+        if file:
+            refresh_file_expiry(file)
         recipient = SigningRecipient.objects.select_related(
             "signing_request__client_file", "signing_request__template_version__agreement",
         ).filter(
             signing_request__client_file_id=file_id, signing_request__client_file__company=request.user,
+            signing_request__client_file__current_request_id=F("signing_request_id"),
             signing_request__template_version__agreement__company=request.user, role="company",
         ).first()
         if recipient is None:
@@ -37,7 +42,7 @@ class CompanySigning(ClientSigning):
         client.full_clean()
         existing = SigningSubmission.objects.filter(recipient=recipient).exists()
         allowed = (ClientFile.Status.FINALIZING, ClientFile.Status.COMPLETED) if existing else (ClientFile.Status.AWAITING_COMPANY,)
-        if issued.client_file.status not in allowed:
+        if issued.status not in allowed or issued.client_file.status != issued.status:
             raise SigningError("This request is not available for company countersigning.", status=409)
         if not existing and issued.expires_at and issued.expires_at <= timezone.now():
             raise SigningError("This signing request has expired. No further signatures can be accepted.", status=410)
@@ -60,9 +65,7 @@ class CompanySigning(ClientSigning):
     @transaction.atomic
     def act(cls, request, recipient, payload):
         # Acquire the same writer lock as client signing before reading state.
-        ClientFile.objects.filter(
-            pk=recipient.signing_request.client_file_id, company=request.user,
-        ).update(updated_at=F("updated_at"))
+        lock_file(recipient.signing_request.client_file_id, request.user.pk)
         recipient = cls.recipient(request, recipient.signing_request.client_file_id)
         issued = recipient.signing_request
         expected = {
@@ -107,7 +110,5 @@ class CompanySigning(ClientSigning):
                 company_user=request.user, submission_key=key, pdf_sha256=issued.template_version.pdf_sha256,
                 values=values, consent_text=CONSENT_TEXT,
             )
-            file = issued.client_file
-            file.status = ClientFile.Status.FINALIZING
-            file.save(update_fields=["status", "updated_at"])
+            set_request_status(issued, ClientFile.Status.FINALIZING)
         return cls.snapshot(recipient)

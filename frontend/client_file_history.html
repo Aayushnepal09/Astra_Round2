@@ -1,0 +1,40 @@
+{% extends "shared/base.html" %}
+{% block title %}Request history · {{ file.client_name }} · Astra{% endblock %}
+{% block resources %}<link rel="stylesheet" href="{{ static_prefix }}client_file.css">{% endblock %}
+{% block body_attributes %}class="draft-editor"{% endblock %}
+{% block content %}
+  <header class="draft-header">
+    <a class="brand" href="{{ dashboard_url }}" aria-label="Astra workspace"><span class="reference-logo"><svg aria-hidden="true"><use href="#icon-check"/></svg></span>astra</a>
+    <div class="draft-company"><div><strong>{{ company_name }}</strong><span>Company workspace</span></div></div>
+  </header>
+  <main class="draft-main">
+    <a class="draft-back-link" href="{% url 'company_file_detail' file.pk %}">Back to client file</a>
+    <div class="draft-heading"><div><h1>Request history</h1><p>{{ file.reference }} · {{ file.client_name }} · Company access only</p></div></div>
+    {% for record in records %}
+      <section class="draft-section">
+        <h2>{{ record.request.get_status_display }}{% if record.current %} · Current required request{% endif %}</h2>
+        <p class="draft-section-copy">Request {{ record.request.pk }} · Issued {{ record.request.created_at|date:"M j, Y H:i:s T" }}</p>
+        {% if record.request.expires_at %}<p>Signing deadline: {{ record.request.expires_at|date:"M j, Y H:i:s T" }}. Access-code replacement does not extend this deadline.</p>{% endif %}
+        {% if record.request.status == 'expired' %}<p>Signing deadline passed. Earlier accepted signatures are retained; a replacement requires fresh signatures.</p>{% endif %}
+        <p>{{ record.request.template_version.name }} · Version {{ record.request.template_version.number }} · <a href="{{ dashboard_url }}#templates/published/{{ record.request.template_version_id }}" target="_blank" rel="noopener">Review fixed template</a></p>
+        {% if record.request.replaces_id %}<p>Replaces request {{ record.request.replaces_id }}. Signatures and consent start again for this request.</p>{% endif %}
+        {% if record.request.cancelled_at %}<p>Cancelled {{ record.request.cancelled_at|date:"M j, Y H:i:s T" }} by {{ record.request.cancelled_by.get_short_name }}. Further signing stopped. Earlier accepted signatures remain recorded.</p>{% endif %}
+        {% if record.preparation %}
+          <h3>Fixed company-prepared values</h3>
+          <dl>{% for value in record.preparation %}<dt>{{ value.label }}</dt><dd>{{ value.value|linebreaksbr }}</dd>{% endfor %}</dl>
+        {% endif %}
+        {% for signer in record.signers %}
+          <h3>{{ signer.recipient.role|title }} · {{ signer.recipient.name }}</h3>
+          <p>{{ signer.recipient.email }}</p>
+          {% if signer.submission %}
+            <p>Signature accepted {{ signer.submission.submitted_at|date:"M j, Y H:i:s T" }} · Submission {{ signer.submission.pk }} · {{ signer.submission.signature_method }}</p>
+            <dl>{% for value in signer.values %}<dt>{{ value.label }}</dt><dd>{{ value.value|linebreaksbr }}</dd>{% endfor %}</dl>
+            <p class="draft-section-copy">{{ signer.submission.consent_text }}</p>
+          {% else %}<p>No accepted signature recorded.</p>{% endif %}
+        {% endfor %}
+        {% if record.finalization.pdfUrl %}<div class="draft-agreement-actions"><a class="button secondary" href="{{ record.finalization.pdfUrl }}" target="_blank" rel="noopener">View completed PDF</a><a href="{{ record.finalization.historyUrl }}" target="_blank" rel="noopener">View signing history</a></div>{% endif %}
+      </section>
+    {% empty %}<p>No signing requests have been issued for this file.</p>{% endfor %}
+    {% if page.has_other_pages %}<nav class="draft-agreement-actions" aria-label="Request history pages">{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">Previous</a>{% endif %}<span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>{% if page.has_next %}<a href="?page={{ page.next_page_number }}">Next</a>{% endif %}</nav>{% endif %}
+  </main>
+{% endblock %}

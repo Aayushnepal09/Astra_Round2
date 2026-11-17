@@ -116,7 +116,7 @@ class ClientAgreementSigning(ClientAgreement):
                 except (SigningError, ValidationError, DatabaseError):
                     # An accepted signature stays accepted when finalization needs retry.
                     pass
-                self.recipient.signing_request.client_file.refresh_from_db()
+                self.recipient.signing_request.refresh_from_db()
                 result = self.signing_service.snapshot(self.recipient)
             return JsonResponse({"signing": result, "csrfToken": get_token(request)})
         except (ValueError, RequestDataTooBig):

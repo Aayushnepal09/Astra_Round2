@@ -7,17 +7,17 @@ from django.conf import settings
 from django.contrib.auth.hashers import make_password
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import F
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.crypto import salted_hmac
 
 from agreements.storage import PrivateDocumentStorage
 from agreements.processing import DocumentError, PdfProcessor
-from .preparation import PreparationValues
 from login.client_throttle import ClientAccessThrottle
 from login.models import ClientInvitation
 from .models import ClientFile, SigningAccess, SigningRecipient, SigningRequest
+from .preparation import PreparationValues
+from .lifecycle import RequestLifecycleError, lock_file, save_file_state, refresh_file_expiry
 
 
 def demo_code(invitation):
@@ -47,12 +47,18 @@ def signing_recipient(invitation):
         return None
     recipient = access.recipient
     issued = recipient.signing_request
-    if (recipient.role != "client" or issued.client_file.status not in (
+    issued.client_file = refresh_file_expiry(issued.client_file)
+    if issued.client_file.current_request_id == issued.pk:
+        issued = issued.client_file.current_request
+        recipient.signing_request = issued
+    if (recipient.role != "client" or issued.client_file.current_request_id != issued.pk
+            or issued.status != issued.client_file.status or issued.status not in (
             ClientFile.Status.AWAITING_CLIENT, ClientFile.Status.AWAITING_COMPANY, ClientFile.Status.FINALIZING, ClientFile.Status.COMPLETED)
-            or (issued.client_file.status not in (ClientFile.Status.FINALIZING, ClientFile.Status.COMPLETED)
+            or (issued.status not in (ClientFile.Status.FINALIZING, ClientFile.Status.COMPLETED)
                 and issued.expires_at is not None and issued.expires_at <= timezone.now())
             or issued.client_file.company_id != invitation.company_id
             or issued.template_version.agreement.company_id != invitation.company_id
+            or issued.client_file.template_version_id != issued.template_version_id
             or invitation.request_ref != str(issued.pk) or recipient.email != invitation.client_email):
         return None
     return recipient
@@ -63,18 +69,20 @@ class DemoRequestIssuer:
         self.company = company
 
     def _lock_file(self, file_id):
-        files = ClientFile.objects.filter(pk=file_id, company=self.company)
-        # Acquire a writer before reading on SQLite as well as row-locking DBs.
-        if not files.update(updated_at=F("updated_at")):
-            raise ClientFile.DoesNotExist
-        return files.select_related("template_version__agreement").get()
+        return lock_file(file_id, self.company.pk)
 
     @transaction.atomic
-    def issue(self, file_id):
+    def issue(self, file_id, *, template_version_id=None, updated_at=None, replaces_request_id=None):
         file = self._lock_file(file_id)
-        existing = SigningRequest.objects.filter(client_file=file).first()
-        if existing:
+        existing = file.current_request
+        if existing and existing.status not in (SigningRequest.Status.CANCELLED, SigningRequest.Status.EXPIRED):
+            if (str(existing.replaces_id) if existing.replaces_id else None) != replaces_request_id:
+                raise RequestLifecycleError("The current request changed. Reload the file before sending.")
             return existing, False
+        if (str(file.current_request_id) if file.current_request_id else None) != replaces_request_id:
+            raise RequestLifecycleError("The replacement setup changed. Reload the file before sending.")
+        if str(file.template_version_id) != template_version_id or file.updated_at.isoformat() != updated_at:
+            raise ValidationError("The saved setup changed. Reload the file, review its details, then send again.")
         if file.status != ClientFile.Status.DRAFT:
             raise ValidationError("This file cannot issue a new request.")
         file.full_clean()
@@ -110,7 +118,8 @@ class DemoRequestIssuer:
                     "then retry. No request was issued. " + str(error)
                 }) from error
         issued = SigningRequest.objects.create(client_file=file, template_version=version,
-                                               preparation_values=preparation_values)
+                                               preparation_values=preparation_values, replaces=existing,
+                                               expires_at=timezone.now() + timedelta(seconds=settings.SIGNING_REQUEST_TTL))
         for role in version.roles:
             prefix = "signer" if role == "client" else "company_signer"
             recipient = SigningRecipient.objects.create(
@@ -120,14 +129,19 @@ class DemoRequestIssuer:
             if role == "client":
                 self._create_code(recipient)
         file.status = ClientFile.Status.AWAITING_CLIENT
-        file.save(update_fields=["status", "updated_at"])
+        file.current_request = issued
+        save_file_state(file, ["status", "current_request"])
         return issued, True
 
     def _create_code(self, recipient):
+        code_expiry = timezone.now() + timedelta(seconds=settings.CLIENT_CODE_TTL)
+        issued = recipient.signing_request
+        if issued.status not in (ClientFile.Status.FINALIZING, ClientFile.Status.COMPLETED) and issued.expires_at:
+            code_expiry = min(code_expiry, issued.expires_at)
         invitation = ClientInvitation(
             company=self.company, client_email=recipient.email,
             request_ref=str(recipient.signing_request_id),
-            expires_at=timezone.now() + timedelta(seconds=settings.CLIENT_CODE_TTL),
+            expires_at=code_expiry,
         )
         with ClientAccessThrottle.generation(invitation):
             invitation.code_hash = make_password(demo_code(invitation))
@@ -139,15 +153,21 @@ class DemoRequestIssuer:
     @transaction.atomic
     def replace_code(self, file_id, previous_id):
         file = self._lock_file(file_id)
-        recipient = SigningRecipient.objects.get(signing_request__client_file=file, role="client")
-        if recipient.signing_request.expires_at and recipient.signing_request.expires_at <= timezone.now():
+        recipient = SigningRecipient.objects.get(signing_request_id=file.current_request_id, role="client")
+        if not ClientInvitation.objects.filter(pk=previous_id, signing_access__recipient=recipient).exists():
+            raise RequestLifecycleError("This code belongs to an earlier request. Reload the client file.")
+        if (file.status not in (ClientFile.Status.FINALIZING, ClientFile.Status.COMPLETED)
+                and recipient.signing_request.expires_at and recipient.signing_request.expires_at <= timezone.now()):
             raise ValidationError("This signing request has expired. A replacement code cannot extend it.")
         current = ClientInvitation.objects.filter(signing_access__recipient=recipient).order_by("-created_at", "-id").first()
+        if current is None or signing_recipient(current) is None:
+            raise ValidationError("This request is unavailable for client access.")
+        if (file.status != ClientFile.Status.AWAITING_CLIENT
+                and not recipient.signing_request.submissions.filter(recipient=recipient).exists()):
+            raise ValidationError("Read-only access requires the client's recorded submission.")
         # Reconcile a retry after the replacement response was lost.
         if str(current.pk) != previous_id:
             return recipient.signing_request
-        if file.status != ClientFile.Status.AWAITING_CLIENT:
-            raise ValidationError("This request is not awaiting the client.")
         if invitation_state(current) not in ("expired", "locked", "verified"):
             raise ValidationError("The current code is still available. Use it before requesting a replacement.")
         self._create_code(recipient)
@@ -158,17 +178,23 @@ class DemoRequestIssuer:
         return recipient.signing_request
 
     def snapshot(self, issued):
+        file = refresh_file_expiry(issued.client_file)
+        if file.current_request_id == issued.pk:
+            issued = file.current_request
+            issued.client_file = file
         if (issued.client_file.company_id != self.company.pk
                 or issued.template_version.agreement.company_id != self.company.pk):
             raise ClientFile.DoesNotExist
         recipient = issued.recipients.get(role="client")
         invitation = ClientInvitation.objects.filter(signing_access__recipient=recipient).order_by("-created_at", "-id").first()
         state = invitation_state(invitation)
-        progress = issued.client_file.status
-        if progress != ClientFile.Status.AWAITING_CLIENT:
-            state = "submitted"
-        if progress not in (ClientFile.Status.FINALIZING, ClientFile.Status.COMPLETED) and issued.expires_at and issued.expires_at <= timezone.now():
+        progress = issued.status
+        available = signing_recipient(invitation) is not None
+        read_only = issued.submissions.filter(recipient=recipient).exists()
+        if progress == SigningRequest.Status.EXPIRED:
             state = "request_expired"
+        if progress == SigningRequest.Status.CANCELLED:
+            state = "cancelled"
         company_url = None
         if (state != "request_expired" and progress in (ClientFile.Status.AWAITING_COMPANY, ClientFile.Status.FINALIZING, ClientFile.Status.COMPLETED)
                 and "company" in issued.template_version.roles
@@ -176,6 +202,7 @@ class DemoRequestIssuer:
             company_url = reverse("company_agreement", args=[issued.client_file_id])
         return {
             "requestId": str(issued.pk), "templateVersionId": str(issued.template_version_id),
+            "requestExpiresAt": issued.expires_at.isoformat() if issued.expires_at else None,
             "recipient": {"name": recipient.name, "email": recipient.email},
             "preparationValues": dict(issued.preparation_values),
             "selectedTemplate": {
@@ -186,12 +213,15 @@ class DemoRequestIssuer:
             },
             "invitationId": str(invitation.pk), "state": state,
             "progress": progress,
+            "readOnly": read_only,
+            "accessAvailable": available,
             "companySigningUrl": company_url,
             "finalization": self.finalization_snapshot(issued),
             "link": reverse("client_invitation", args=[invitation.pk]),
-            "code": demo_code(invitation) if state == "pending" else None,
+            "code": demo_code(invitation) if available and state == "pending" else None,
             "expiresAt": invitation.expires_at.isoformat(), "serverNow": timezone.now().isoformat(),
-            "canReplace": state in ("expired", "locked", "verified") and progress == ClientFile.Status.AWAITING_CLIENT,
+            "canReplace": available and state in ("expired", "locked", "verified")
+                and (progress == ClientFile.Status.AWAITING_CLIENT or read_only),
         }
 
     @staticmethod

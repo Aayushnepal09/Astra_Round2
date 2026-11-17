@@ -1,8 +1,11 @@
 import json
 import uuid
+from datetime import timedelta
 
 from django.core.exceptions import RequestDataTooBig, SuspiciousFileOperation, ValidationError
+from django.core.paginator import Paginator
 from django.db import DatabaseError, IntegrityError, transaction
+from django.db.models import F
 from django.http import FileResponse, HttpResponseNotFound, JsonResponse
 from django.http.request import UnreadablePostError
 from django.shortcuts import redirect, render
@@ -18,6 +21,8 @@ from .signing import DemoRequestIssuer
 from .workspace import CompanyFileWorkspace
 from .finalization import AgreementFinalizer
 from .submissions import SigningError
+from .lifecycle import RequestLifecycle, RequestLifecycleError, refresh_file_expiry
+from .preparation import PreparationValues
 
 
 class CompanyFileAccessMixin:
@@ -94,6 +99,7 @@ class CompanyFileEditor(CompanyFileAccessMixin, View):
                 "code": "workspace_changed",
             }, status=409)
         allowed = set(ClientFileDraftForm.Meta.fields)
+        updated_at = data.pop("updatedAt", None) if not self.is_new else None
         if self.is_new:
             allowed.add("creation_key")
         if (set(data) - allowed
@@ -112,6 +118,8 @@ class CompanyFileEditor(CompanyFileAccessMixin, View):
         form = None
         try:
             with transaction.atomic():
+                if not self.is_new:
+                    files.filter(pk=file_id).update(updated_at=F("updated_at"))
                 file = (
                     files.filter(creation_key=creation_key).first()
                     if self.is_new
@@ -125,10 +133,22 @@ class CompanyFileEditor(CompanyFileAccessMixin, View):
                     file = ClientFile(company=request.user, creation_key=creation_key)
                 if file.status != ClientFile.Status.DRAFT:
                     return auth_error("Only draft files can be edited.", status=409)
+                # The writer lock above keeps this check and save indivisible,
+                # including on SQLite, where select_for_update alone is a no-op.
+                previous_updated_at = file.updated_at
+                if not self.is_new and updated_at != previous_updated_at.isoformat():
+                    return JsonResponse({
+                        "error": "This file was updated in another tab. Your changes have not been saved.",
+                        "code": "draft_conflict",
+                    }, status=409)
                 form = ClientFileDraftForm(data, instance=file)
                 if not form.is_valid():
                     return self.invalid(form)
                 file = form.save()
+                if not self.is_new and file.updated_at <= previous_updated_at:
+                    # Keep versions distinct even if the clock repeats or moves back.
+                    file.updated_at = previous_updated_at + timedelta(microseconds=1)
+                    files.filter(pk=file.pk).update(updated_at=file.updated_at)
         except (ValidationError, IntegrityError) as error:
             if self.is_new:
                 existing = files.filter(creation_key=creation_key).first()
@@ -170,10 +190,10 @@ class CompanyFileRequest(CompanyFileAccessMixin, View):
 
     def get(self, request, file_id):
         try:
-            if not ClientFile.objects.filter(pk=file_id, company=request.user).exists():
+            file = ClientFile.objects.select_related("current_request", "template_version__agreement").filter(pk=file_id, company=request.user).first()
+            if file is None:
                 return auth_error("Client file not found.", status=404)
-            issued = SigningRequest.objects.filter(client_file_id=file_id, client_file__company=request.user).first()
-            return JsonResponse({"invitation": DemoRequestIssuer(request.user).snapshot(issued) if issued else None})
+            return JsonResponse(self.state(request.user, file))
         except DatabaseError:
             return auth_error("Couldn’t load the invitation. Try again.", status=503)
 
@@ -182,7 +202,7 @@ class CompanyFileRequest(CompanyFileAccessMixin, View):
             payload = read_json(request)
             if payload.get("workspace_id") != str(request.user.pk):
                 return JsonResponse({"error": "Your workspace changed. Reload this file.", "code": "workspace_changed"}, status=409)
-            if set(payload) - {"workspace_id", "replaceInvitationId"}:
+            if set(payload) - {"workspace_id", "replaceInvitationId", "templateVersionId", "updatedAt", "replacesRequestId"}:
                 return auth_error("Send only the supported request options.")
             issuer = DemoRequestIssuer(request.user)
             if "replaceInvitationId" in payload:
@@ -190,18 +210,87 @@ class CompanyFileRequest(CompanyFileAccessMixin, View):
                 issued = issuer.replace_code(file_id, previous)
                 created = False
             else:
-                issued, created = issuer.issue(file_id)
-            return JsonResponse({"invitation": issuer.snapshot(issued), "created": created}, status=201 if created else 200)
+                issued, created = issuer.issue(file_id, template_version_id=payload.get("templateVersionId"),
+                                              updated_at=payload.get("updatedAt"), replaces_request_id=payload.get("replacesRequestId"))
+            return JsonResponse({**self.state(request.user, issued.client_file), "created": created}, status=201 if created else 200)
         except (ClientFile.DoesNotExist, SigningRecipient.DoesNotExist):
             return auth_error("Client file or request not found.", status=404)
         except (ValueError, TypeError, AttributeError, RequestDataTooBig):
             return auth_error("Send a valid request option.")
         except ValidationError as error:
-            return auth_error(" ".join(error.messages), status=422)
+            return JsonResponse({"error": " ".join(error.messages),
+                                 "fieldErrors": getattr(error, "message_dict", {})}, status=422)
+        except RequestLifecycleError as error:
+            return JsonResponse({"error": str(error), "code": error.code}, status=error.status)
         except ClientThrottleExceeded:
             return auth_error("Code generation is temporarily locked. Wait and retry; the same request will be used.", status=429)
         except (DatabaseError, OSError, SuspiciousFileOperation):
             return auth_error("Couldn’t confirm the invitation. Retry to recover the same request.", status=503)
+
+    @staticmethod
+    def state(company, file):
+        file = refresh_file_expiry(file)
+        issued = file.current_request
+        return {
+            'companyId': str(company.pk),
+            "file": CompanyFileWorkspace.draft(file),
+            "invitation": DemoRequestIssuer(company).snapshot(issued)
+                if issued and file.status != ClientFile.Status.DRAFT else None,
+        }
+
+
+class CompanyFileLifecycle(CompanyFileAccessMixin, View):
+    json_response = True
+    action = "cancel"
+
+    def post(self, request, file_id):
+        try:
+            payload = read_json(request)
+            if payload.get("workspace_id") != str(request.user.pk):
+                return JsonResponse({"error": "Your workspace changed. Reload this file.", "code": "workspace_changed"}, status=409)
+            if set(payload) != {"workspace_id", "requestId"}:
+                return auth_error("Send the request identity and workspace only.")
+            request_id = uuid.UUID(payload["requestId"])
+            lifecycle = RequestLifecycle(request.user)
+            operation = lifecycle.cancel if self.action == "cancel" else lifecycle.prepare_replacement
+            file, outcome = operation(file_id, request_id)
+            return JsonResponse({**CompanyFileRequest.state(request.user, file), "outcome": outcome})
+        except ClientFile.DoesNotExist:
+            return auth_error("Client file not found.", status=404)
+        except (RequestLifecycleError, SigningError) as error:
+            return JsonResponse({"error": str(error), "code": error.code}, status=error.status)
+        except (ValueError, TypeError, AttributeError, RequestDataTooBig):
+            return auth_error("Send a valid request identity.")
+        except ValidationError as error:
+            return auth_error(" ".join(error.messages), status=422)
+        except DatabaseError:
+            return auth_error("Couldn’t confirm the request state. Refresh status, then retry the same action.", status=503)
+
+
+class CompanyRequestHistory(CompanyFileAccessMixin, View):
+    def get(self, request, file_id):
+        file = ClientFile.objects.filter(pk=file_id, company=request.user).first()
+        if file is None:
+            return HttpResponseNotFound("Client file not found.")
+        file = refresh_file_expiry(file)
+        requests = file.signing_requests.select_related("template_version__agreement", "cancelled_by").prefetch_related(
+            "recipients", "submissions__recipient",
+        ).order_by("-created_at", "-id")
+        page = Paginator(requests, 25).get_page(request.GET.get("page", 1))
+        records = []
+        for issued in page:
+            submissions = {s.recipient_id: s for s in issued.submissions.all()}
+            signers = []
+            for recipient in sorted(issued.recipients.all(), key=lambda r: r.role != "client"):
+                submission = submissions.get(recipient.pk)
+                signers.append({"recipient": recipient, "submission": submission,
+                                "values": [{"label": field["label"] or field["type"], "value": submission.values.get(field["id"], "")}
+                                           for field in issued.template_version.fields if submission and field["role"] == recipient.role]})
+            records.append({"request": issued, "current": issued.pk == file.current_request_id, "signers": signers,
+                            "preparation": [{"label": field["label"] or field["type"], "value": issued.preparation_values.get(field["id"], "")}
+                                            for field in PreparationValues.fields(issued.template_version)],
+                            "finalization": AgreementFinalizer.snapshot(issued)})
+        return render(request, "client_file_history.html", {**company_context(request), "file": file, "records": records, "page": page})
 
 
 class CompanyFileFinalize(CompanyFileAccessMixin, View):
@@ -228,9 +317,9 @@ class CompanyCompletedArtifact(CompanyFileAccessMixin, View):
     json_response = True
     history = False
 
-    def get(self, request, file_id):
+    def get(self, request, file_id, request_id=None):
         try:
-            completion, handle = AgreementFinalizer(request.user.pk).open_completed(file_id)
+            completion, handle = AgreementFinalizer(request.user.pk).open_completed(file_id, request_id=request_id)
             if self.history:
                 handle.close()
                 response = JsonResponse(completion.history, json_dumps_params={"indent": 2})

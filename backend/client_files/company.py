@@ -17,7 +17,7 @@ from .submissions import SigningError
 class CompanyAgreement(ClientAgreement):
     signing_service = CompanySigning
     signing_route = "company_agreement_signing"
-    page_route = "company_agreement_page"
+    page_route = "company_countersign_page"
 
     def dispatch(self, request, *args, **kwargs):
         try:

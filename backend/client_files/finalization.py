@@ -15,20 +15,25 @@ from agreements.storage import PrivateDocumentStorage
 from .models import ClientFile, SigningCompletion, SigningRequest
 from .submissions import ClientSigning, CONSENT_TEXT, SigningError
 from .preparation import PreparationValues
+from .lifecycle import lock_file, set_request_status
 
 
 class AgreementFinalizer:
     def __init__(self, company_id):
         self.company_id = company_id
 
-    def issued(self, file_id, *, lock=False):
+    def issued(self, file_id, *, lock=False, request_id=None):
         if lock:
-            if not ClientFile.objects.filter(pk=file_id, company_id=self.company_id).update(updated_at=F("updated_at")):
+            try:
+                lock_file(file_id, self.company_id)
+            except ClientFile.DoesNotExist:
                 raise SigningError("Client file not found.", status=404)
-        issued = SigningRequest.objects.select_related("client_file", "template_version__agreement").filter(
+        requests = SigningRequest.objects.select_related("client_file", "template_version__agreement").filter(
             client_file_id=file_id, client_file__company_id=self.company_id,
             template_version__agreement__company_id=self.company_id,
-        ).first()
+        )
+        requests = requests.filter(pk=request_id) if request_id else requests.filter(pk=F("client_file__current_request_id"))
+        issued = requests.first()
         if issued is None:
             raise SigningError("Signing request not found.", status=404)
         return issued
@@ -68,6 +73,7 @@ class AgreementFinalizer:
         # Reserve identity in a short transaction before any external artifact write.
         with transaction.atomic():
             issued = self.issued(file_id, lock=True)
+            request_id = issued.pk
             if issued.status == ClientFile.Status.COMPLETED:
                 return self.snapshot(issued)
             if issued.status != ClientFile.Status.FINALIZING:
@@ -78,7 +84,7 @@ class AgreementFinalizer:
             SigningCompletion.objects.get_or_create(signing_request=issued, defaults={"pdf_key": key})
         try:
             with transaction.atomic():
-                issued = self.issued(file_id, lock=True)
+                issued = self.issued(file_id, lock=True, request_id=request_id)
                 completion = SigningCompletion.objects.get(signing_request=issued)
                 if completion.completed_at:
                     return self.snapshot(issued)
@@ -117,14 +123,13 @@ class AgreementFinalizer:
                 completion.completed_at, completion.last_error = now, ""
                 completion.save()
                 # History and completion status commit together, after the durable PDF.
-                issued.client_file.status = ClientFile.Status.COMPLETED
-                issued.client_file.save(update_fields=["status", "updated_at"])
+                set_request_status(issued, ClientFile.Status.COMPLETED)
                 return self.snapshot(issued)
         except (SigningError, ValidationError, DocumentError, OSError, ValueError, SuspiciousFileOperation, DatabaseError) as error:
             message = str(error) if isinstance(error, (SigningError, DocumentError)) else "Final-document generation or storage could not be confirmed. Retry finalization; recorded signatures are preserved."
             try:
                 with transaction.atomic():
-                    issued = self.issued(file_id, lock=True)
+                    issued = self.issued(file_id, lock=True, request_id=request_id)
                     completion = SigningCompletion.objects.get(signing_request=issued)
                     if not completion.completed_at:
                         completion.last_error = message
@@ -165,12 +170,12 @@ class AgreementFinalizer:
             "error": completion.last_error if completion else "",
             "completedAt": completion.completed_at.isoformat() if complete else None,
             "retryUrl": reverse("company_file_finalize", args=[issued.client_file_id]),
-            "pdfUrl": reverse("company_completed_pdf", args=[issued.client_file_id]) if complete else None,
-            "historyUrl": reverse("company_signing_history", args=[issued.client_file_id]) if complete else None,
+            "pdfUrl": reverse("company_request_completed_pdf", args=[issued.client_file_id, issued.pk]) if complete else None,
+            "historyUrl": reverse("company_request_signing_history", args=[issued.client_file_id, issued.pk]) if complete else None,
         }
 
-    def open_completed(self, file_id):
-        issued = self.issued(file_id)
+    def open_completed(self, file_id, *, request_id=None):
+        issued = self.issued(file_id, request_id=request_id)
         completion = SigningCompletion.objects.filter(signing_request=issued, completed_at__isnull=False).first()
         if issued.status != ClientFile.Status.COMPLETED or completion is None:
             raise SigningError("Final artifacts are not yet available. Retry finalization from the client file.", status=409)

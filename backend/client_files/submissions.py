@@ -7,14 +7,14 @@ from datetime import date
 from django.conf import settings
 from django.core.exceptions import SuspiciousFileOperation
 from django.db import transaction
-from django.db.models import F
 from django.utils import timezone
 
 from agreements.processing import DocumentError, PdfProcessor
 from agreements.storage import PrivateDocumentStorage
-from login.common import client_identity
 from .models import ClientFile, SigningDraft, SigningSubmission
+from login.common import client_identity
 from .signing import signing_recipient
+from .lifecycle import lock_file, set_request_status
 
 
 CONSENT_TEXT = "I have reviewed this agreement and intend my typed name in each signature field to be my electronic signature when I select Sign & submit."
@@ -44,10 +44,11 @@ class ClientSigning:
         return {
             "requestId": str(issued.pk), "templateVersionId": str(issued.template_version_id),
             "recipientId": str(recipient.pk), "pdfSha256": issued.template_version.pdf_sha256,
+            "signer": {"name": recipient.name, "email": recipient.email},
             "fields": [field for field in issued.template_version.fields if field["role"] == recipient.role],
             "values": submission.values if submission else draft.values if draft else {},
             "revision": draft.revision if draft else 0,
-            "consentText": CONSENT_TEXT, "progress": issued.client_file.status,
+            "consentText": CONSENT_TEXT, "progress": issued.status,
             "receipt": cls.receipt(submission) if submission else None,
         }
 
@@ -135,7 +136,7 @@ class ClientSigning:
     @transaction.atomic
     def act(cls, request, recipient, payload):
         # Serialize draft saves and submissions, including on SQLite.
-        ClientFile.objects.filter(pk=recipient.signing_request.client_file_id).update(updated_at=F("updated_at"))
+        lock_file(recipient.signing_request.client_file_id)
         invitation = client_identity(request, touch=False)
         current = signing_recipient(invitation) if invitation else None
         if current is None or current.pk != recipient.pk:
@@ -169,7 +170,7 @@ class ClientSigning:
                 return cls.snapshot(recipient)
         elif existing:
             raise SigningError("This agreement was already submitted. Check its confirmation.", status=409, code="already_submitted")
-        if issued.client_file.status != ClientFile.Status.AWAITING_CLIENT:
+        if issued.status != ClientFile.Status.AWAITING_CLIENT:
             raise SigningError("This request is not awaiting your signature.", status=409)
         draft = SigningDraft.objects.filter(recipient=recipient).first()
         revision = draft.revision if draft else 0
@@ -188,8 +189,6 @@ class ClientSigning:
                 invitation=invitation, submission_key=key, pdf_sha256=issued.template_version.pdf_sha256,
                 values=values, consent_text=CONSENT_TEXT,
             )
-            file = issued.client_file
-            file.status = (ClientFile.Status.AWAITING_COMPANY if issued.recipients.filter(role="company").exists()
-                           else ClientFile.Status.FINALIZING)
-            file.save(update_fields=["status", "updated_at"])
+            set_request_status(issued, ClientFile.Status.AWAITING_COMPANY if issued.recipients.filter(role="company").exists()
+                               else ClientFile.Status.FINALIZING)
         return cls.snapshot(recipient)
