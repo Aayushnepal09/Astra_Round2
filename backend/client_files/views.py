@@ -144,6 +144,9 @@ class CompanyFileEditor(CompanyFileAccessMixin, View):
                 form = ClientFileDraftForm(data, instance=file)
                 if not form.is_valid():
                     return self.invalid(form)
+                if self.is_new:
+                    from .organization import ClientOrganization
+                    ClientOrganization(request.user).attach_legacy_draft(form.instance)
                 file = form.save()
                 if not self.is_new and file.updated_at <= previous_updated_at:
                     # Keep versions distinct even if the clock repeats or moves back.

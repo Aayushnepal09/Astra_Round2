@@ -9,6 +9,7 @@ from django.utils import timezone
 from login.common import company_authenticated
 from .models import ClientFile, SigningDraft, SigningRecipient, SigningSubmission
 from .submissions import ClientSigning, CONSENT_TEXT, SigningError
+from .accepted_values import accepted_fields
 from .lifecycle import lock_file, set_request_status, refresh_file_expiry
 
 
@@ -55,11 +56,7 @@ class CompanySigning(ClientSigning):
     @staticmethod
     def client_values(recipient):
         issued = recipient.signing_request
-        submission = SigningSubmission.objects.get(signing_request=issued, recipient__role="client")
-        return [
-            {**field, "value": submission.values.get(field["id"], "")}
-            for field in issued.template_version.fields if field["role"] == "client"
-        ]
+        return accepted_fields(issued,role='client')
 
     @classmethod
     @transaction.atomic

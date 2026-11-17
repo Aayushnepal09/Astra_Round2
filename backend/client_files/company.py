@@ -41,8 +41,14 @@ class CompanyAgreement(ClientAgreement):
         return super().get(request, file_id, page_number)
 
     def review_context(self, request, scope_id):
-        return {
+        client_submission = self.recipient.signing_request.submissions.select_related('recipient').get(recipient__role='client')
+        return {"company_signature_pending": self.recipient.signing_request.status == "awaiting_company",
+            "agreement_completed": self.recipient.signing_request.status == "completed",
+            "client_signed_at": client_submission.submitted_at,
+            "client_signer_name": client_submission.recipient.name,
             "company_signing": True,
+            "dashboard_url": reverse("company_dashboard"),
+            "company_name": request.user.company_name or "Your company",
             "logout_url": reverse("company_logout"),
             "invitation_url": reverse("company_login"),
             "file_url": reverse("company_file_detail", args=[scope_id]),

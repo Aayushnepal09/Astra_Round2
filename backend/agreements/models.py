@@ -41,6 +41,7 @@ class Agreement(models.Model):
         related_name="agreements", editable=False,
     )
     title = models.CharField(max_length=200, blank=True)
+    job = models.ForeignKey("client_files.ClientJob", on_delete=models.PROTECT, null=True, blank=True, related_name="uploaded_agreements", editable=False)
     original_filename = models.CharField(max_length=255)
     detected_format = models.CharField(
         max_length=8, choices=Format.choices, blank=True, editable=False,
@@ -158,6 +159,8 @@ class Agreement(models.Model):
     def clean(self):
         super().clean()
         errors = {}
+        if self.job_id and self.job.company_id != self.company_id:
+            errors["job"] = "Choose a job in this workspace."
         if isinstance(self.title, str):
             self.title = self.title.strip()
         if isinstance(self.original_filename, str):
@@ -234,7 +237,7 @@ class Agreement(models.Model):
         with transaction.atomic(using=using):
             if not self._state.adding:
                 previous = type(self).objects.using(using).select_for_update().get(pk=self.pk)
-                frozen = ["company_id", "creation_key", "created_at"]
+                frozen = ["company_id", "job_id", "creation_key", "created_at"]
                 if previous.original_key:
                     frozen.extend(self.ORIGINAL_FIELDS)
                 if previous.detected_format:

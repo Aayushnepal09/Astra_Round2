@@ -18,6 +18,9 @@ from django.views import View
 from django.views.decorators.debug import sensitive_variables
 
 from client_files.workspace import CompanyFileWorkspace
+from client_files.models import ClientJob
+from django.http import HttpResponseNotFound
+import uuid
 
 from .common import (
     auth_error, auth_result, company_authenticated, company_context, read_json,
@@ -102,12 +105,24 @@ class CompanyDashboard(View):
     def get(self, request):
         if not company_authenticated(request):
             return redirect("company_login")
+        job = None
+        if request.GET.get("job"):
+            try:
+                job = ClientJob.objects.select_related("client").filter(company=request.user, pk=uuid.UUID(request.GET["job"])).first()
+            except ValueError:
+                return HttpResponseNotFound("Job not found.")
+            if job is None:
+                return HttpResponseNotFound("Job not found.")
         response = render(request, "dashboard.html", {
             **company_context(request),
             "workspace_data": CompanyFileWorkspace(request.user).snapshot(),
             "files_url": reverse("company_file_list"),
             "create_file_url": reverse("company_file_create"),
             "agreements_url": reverse("company_agreement_list"),
+            "clients_url": reverse("company_clients"),
+            "templates_url": reverse("company_template_list"),
+            "upload_job": job,
+            "job_add_url": reverse("company_job_agreements", args=[job.pk]) if job else "",
         })
         response["Cache-Control"] = "no-store"
         response["Referrer-Policy"] = "same-origin"

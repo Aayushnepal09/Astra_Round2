@@ -4,7 +4,7 @@ from django.db.models.functions import Lower
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import ClientFile
+from .models import ClientFile, CompanyClient
 from .lifecycle import refresh_file_expiry
 
 
@@ -54,6 +54,10 @@ class CompanyFileWorkspace:
             preparation_values = current.preparation_values
         return {
             "id": str(file.pk) if saved else None,
+            "jobId": str(file.job_id) if file.job_id else None,
+            "job": {"id": str(file.job_id), "reference": file.job.reference, "title": file.job.title,
+                    "clientId": str(file.job.client_id), "clientName": file.job.client.name,
+                    "workspaceUrl": f'{reverse("company_dashboard")}?client={file.job.client_id}&open_job={file.job_id}#files'} if file.job_id else None,
             "status": file.status,
             "statusLabel": "Completed" if file.status == "completed" else file.get_status_display(),
             "creationKey": str(file.creation_key),
@@ -123,6 +127,7 @@ class CompanyFileWorkspace:
         recent = self.files.order_by("-updated_at", "-id").values(*self.SUMMARY_FIELDS)[:4]
         return {
             "companyId": self.company_id,
+            "clientCount": CompanyClient.objects.filter(company_id=self.company_id).count(),
             "files": [self.summary(record) for record in page.object_list],
             "recentFiles": [self.summary(record) for record in recent],
             "counts": counts,

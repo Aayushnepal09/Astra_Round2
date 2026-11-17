@@ -19,13 +19,16 @@ logger = logging.getLogger(__name__)
 class AgreementUpload:
     """Validate an original before publishing its immutable private artifact."""
 
-    def __init__(self, company):
+    def __init__(self, company, job=None):
         self.company = company
+        self.job = job
         self.processor = PdfProcessor()
 
     def save(self, source, *, filename, creation_key):
         existing = self._existing(creation_key)
         if existing is not None:
+            if existing.job_id != (self.job.pk if self.job else None):
+                raise DocumentError("This upload key belongs to a different document scope. Choose the file again.", "upload_scope_conflict")
             return existing, False
 
         temporary_root = settings.DATA_DIR / "agreement-processing"
@@ -52,7 +55,7 @@ class AgreementUpload:
                 engine, version = DocxConverter().convert(path, pdf_path)
             geometry = self.processor.validate(pdf_path)
             agreement = Agreement(
-                company=self.company, creation_key=creation_key,
+                company=self.company, creation_key=creation_key, job=self.job,
                 original_filename=filename,
                 detected_format=Agreement.Format.DOCX if is_docx else Agreement.Format.PDF,
                 conversion_engine=engine, conversion_version=version,

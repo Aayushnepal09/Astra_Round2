@@ -12,8 +12,7 @@ from django.utils import timezone
 from agreements.processing import DocumentError, PdfProcessor
 from agreements.storage import PrivateDocumentStorage
 from .models import ClientFile, SigningDraft, SigningSubmission
-from login.common import client_identity
-from .signing import signing_recipient
+from .portal_access import client_access
 from .lifecycle import lock_file, set_request_status
 
 
@@ -137,8 +136,7 @@ class ClientSigning:
     def act(cls, request, recipient, payload):
         # Serialize draft saves and submissions, including on SQLite.
         lock_file(recipient.signing_request.client_file_id)
-        invitation = client_identity(request, touch=False)
-        current = signing_recipient(invitation) if invitation else None
+        invitation, current = client_access(request, recipient_id=recipient.pk, touch=False)
         if current is None or current.pk != recipient.pk:
             raise SigningError("Your access has expired. Verify a replacement code, then retry. Your entered values are still here.", status=401, code="access_expired")
         recipient = current
@@ -182,7 +180,7 @@ class ClientSigning:
             SigningDraft.objects.update_or_create(recipient=recipient, defaults={"values": values, "revision": revision + 1})
         else:
             cls.preflight(recipient, values)
-            if client_identity(request, touch=False) is None or (issued.expires_at and issued.expires_at <= timezone.now()):
+            if client_access(request, recipient_id=recipient.pk, touch=False)[1] is None or (issued.expires_at and issued.expires_at <= timezone.now()):
                 raise SigningError("Your access or request has expired. Verify access again before retrying.", status=401, code="access_expired")
             SigningSubmission.objects.create(
                 recipient=recipient, signing_request=issued, template_version=issued.template_version,

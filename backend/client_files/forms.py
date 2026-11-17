@@ -1,5 +1,6 @@
 from django import forms
 from agreements.models import TemplateVersion
+from django.db.models import Q
 
 from .models import ClientFile
 
@@ -18,7 +19,7 @@ class ClientFileDraftForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["template_version"].queryset = TemplateVersion.objects.filter(
             agreement__company_id=self.instance.company_id,
-        )
+        ).filter(Q(agreement__job__isnull=True) | Q(agreement__job_id=self.instance.job_id))
         self.fields["template_version"].error_messages["invalid_choice"] = "Choose a published version from this workspace."
 
     def clean(self):

@@ -47,14 +47,13 @@ def _available(invitation_id, code_hash):
 class ClientLogin(View):
     def get(self, request, invitation_id=None):
         invitation = client_identity(request)
-        authenticated = invitation is not None and (
-            invitation_id is None or str(invitation.pk) == str(invitation_id)
-        )
-        if authenticated:
-            from client_files.signing import signing_recipient
+        authenticated = invitation is not None and (invitation_id is None or str(invitation.pk) == str(invitation_id))
+        if invitation:
+            from client_files.portal_access import client_access
             from django.shortcuts import redirect
-            if signing_recipient(invitation):
-                return redirect("client_agreement", invitation_id=invitation.pk)
+            _, recipient = client_access(request, invitation_id=invitation_id or invitation.pk)
+            if recipient or (authenticated and request.session.get('client_portal')):
+                return redirect('client_portal', invitation_id=invitation.pk)
         return render_login(request, "client", authenticated=authenticated)
 
     @sensitive_variables("payload", "code")
@@ -107,7 +106,7 @@ class ClientLogin(View):
                 return _invalid_code()
             establish_client_session(request, invitation)
             return auth_result(request, "client", dashboard_url=(
-                reverse("client_agreement", args=[invitation.pk]) if bound else None
+                reverse("client_portal", args=[invitation.pk]) if bound else None
             ))
         except _InvitationUnavailable:
             return _invalid_code()

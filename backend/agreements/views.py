@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.exceptions import RequestDataTooBig, SuspiciousFileOperation, ValidationError
 from django.core.paginator import Paginator
 from django.db import DatabaseError, transaction
-from django.db.models import F
+from django.db.models import F, Q
 from django.http import HttpResponse, JsonResponse
 from django.http.request import UnreadablePostError
 from django.urls import reverse
@@ -23,18 +23,26 @@ from .storage import PrivateDocumentStorage
 from .uploads import AgreementUpload
 from .field_suggestions import FieldSuggester
 from client_files.assistant_provider import AssistantError
+from client_files.models import ClientJob
+from client_files.organization import ClientOrganization
 
 
 def agreement_data(agreement, *, include_versions=False):
+    versions = list(agreement.versions.all())
+    latest = max(versions, key=lambda version: version.number) if versions else None
     data = {
         "id": str(agreement.pk),
         "filename": agreement.original_filename,
         "templateName": agreement.title,
+        "readyVersion": version_data(latest) if latest else None,
+        "hasUnpublishedChanges": bool(latest and latest.source_revision != agreement.fields_revision),
+        "jobId": str(agreement.job_id) if agreement.job_id else None,
         "preparationState": agreement.preparation_state,
         "processingState": agreement.processing_state,
         "processingLabel": agreement.get_processing_state_display(),
         "processingError": agreement.processing_error,
         "pageCount": agreement.page_count,
+        "pageGeometry": agreement.page_geometry,
         "format": agreement.detected_format,
         "conversionEngine": agreement.conversion_engine,
         "conversionVersion": agreement.conversion_version,
@@ -46,7 +54,7 @@ def agreement_data(agreement, *, include_versions=False):
         "pageUrl": reverse("company_agreement_page", args=[agreement.pk, 1]).removesuffix("1/"),
     }
     if include_versions:
-        data["versions"] = [version_data(version) for version in agreement.versions.all()]
+        data["versions"] = [version_data(version) for version in versions]
     return data
 
 
@@ -54,6 +62,8 @@ def version_data(version, *, preview=False):
     agreement = version.agreement
     data = {
         "id": str(version.pk), "name": version.name, "number": version.number,
+        'sourceRevision': version.source_revision,
+        "jobId": str(agreement.job_id) if agreement.job_id else None,
         "roles": version.roles, "publishedAt": version.published_at.isoformat(),
         "preparationFields": [field for field in version.fields if field["role"] == "preparation"],
         "previewUrl": f'{reverse("company_dashboard")}#templates/published/{version.pk}',
@@ -63,6 +73,7 @@ def version_data(version, *, preview=False):
             "filename": f"{version.name} · Version {version.number}",
             "processingState": "ready", "processingLabel": "Published version · read only",
             "pageCount": agreement.page_count, "fields": version.fields,
+            "pageGeometry": agreement.page_geometry,
             "pdfSha256": version.pdf_sha256, "conversionVersion": agreement.conversion_version,
             "pageUrl": reverse("company_template_page", args=[version.pk, 1]).removesuffix("1/"),
         })
@@ -94,12 +105,21 @@ class CompanyAgreementAccessMixin:
 
 class CompanyAgreementList(CompanyAgreementAccessMixin, View):
     def get(self, request):
-        agreements = Agreement.objects.filter(company=request.user)
-        page = Paginator(agreements, 20).get_page(request.GET.get("page", 1))
+        agreements = Agreement.objects.filter(company=request.user, job__isnull=True)
+        job_id = request.GET.get("job_id")
+        if job_id:
+            try:
+                job = ClientJob.objects.filter(company=request.user, pk=uuid.UUID(job_id)).first()
+            except ValueError:
+                return auth_error("Choose a valid job.")
+            if not job:
+                return auth_error("Job not found.", status=404)
+            agreements = Agreement.objects.filter(company=request.user).filter(Q(job__isnull=True) | Q(job=job))
+        page = Paginator(agreements.prefetch_related('versions', 'fields'), 20).get_page(request.GET.get("page", 1))
         return JsonResponse({
             "companyId": str(request.user.pk),
             "agreements": [agreement_data(agreement) for agreement in page],
-            "publishedCount": TemplateVersion.objects.filter(agreement__company=request.user).count(),
+            "publishedCount": TemplateVersion.objects.filter(agreement__company=request.user, agreement__job__isnull=True).count(),
             "pagination": {
                 "number": page.number, "pages": page.paginator.num_pages,
                 "total": page.paginator.count,
@@ -162,7 +182,15 @@ class CompanyAgreementUpload(CompanyAgreementAccessMixin, View):
             limit = settings.AGREEMENT_MAX_BYTES / (1024 * 1024)
             return JsonResponse({"error": f"This file is too large. Choose a PDF or DOCX up to {limit:g} MiB.", "code": "oversized"}, status=413)
         try:
-            agreement, created = AgreementUpload(request.user).save(
+            job = None
+            if request.headers.get("X-Agreement-Job"):
+                try:
+                    job = ClientJob.objects.filter(company=request.user, pk=uuid.UUID(request.headers["X-Agreement-Job"])).first()
+                except ValueError:
+                    return auth_error("Choose a valid job.")
+                if not job:
+                    return auth_error("Job not found.", status=404)
+            agreement, created = AgreementUpload(request.user, job=job).save(
                 iter(lambda: request.read(64 * 1024), b""),
                 filename=filename, creation_key=creation_key,
             )
@@ -344,13 +372,21 @@ class CompanyTemplatePublish(CompanyAgreementAccessMixin, View):
             return auth_error("The saved PDF is unavailable. Try its preview, then retry publishing. Your draft is unchanged.", status=503)
         return JsonResponse({
             "companyId": str(request.user.pk), "version": version_data(version),
-            "publishedCount": TemplateVersion.objects.filter(agreement__company=request.user).count(),
+            "publishedCount": TemplateVersion.objects.filter(agreement__company=request.user, agreement__job__isnull=True).count(),
         }, status=201 if created else 200)
 
 
 class CompanyTemplateList(CompanyAgreementAccessMixin, View):
     def get(self, request):
-        versions = TemplateVersion.objects.filter(agreement__company=request.user).select_related("agreement")
+        job = None
+        if request.GET.get("job_id"):
+            try:
+                job = ClientJob.objects.filter(company=request.user, pk=uuid.UUID(request.GET["job_id"])).first()
+            except ValueError:
+                return auth_error("Choose a valid job.")
+            if not job:
+                return auth_error("Job not found.", status=404)
+        versions = ClientOrganization(request.user).versions(job)
         page = Paginator(versions, 20).get_page(request.GET.get("page", 1))
         return JsonResponse({
             "companyId": str(request.user.pk), "versions": [version_data(version) for version in page],

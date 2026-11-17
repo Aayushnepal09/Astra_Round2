@@ -3,10 +3,16 @@ from django.views.generic import RedirectView
 
 from login.client import ClientLogin, ClientLogout, ClientSession
 from login.company import CompanyDashboard, CompanyLogin, CompanyLogout, CompanySession
-from client_files.client import ClientAgreement, ClientAgreementSigning
+from client_files.client import ClientAgreement, ClientAgreementSigning, ClientCompletedArtifact, ClientPortal
+from client_files.assistant import ClientAgreementAssistant
+from client_files.clients import CompanyClients, CompanyClientDetail, CompanyClientJobs, CompanyJobAgreements
 
 
 urlpatterns = [
+    path("company/clients/", CompanyClients.as_view(), name="company_clients"),
+    path("company/clients/<uuid:client_id>/", CompanyClientDetail.as_view(), name="company_client_detail"),
+    path("company/clients/<uuid:client_id>/jobs/", CompanyClientJobs.as_view(), name="company_client_jobs"),
+    path("company/jobs/<uuid:job_id>/agreements/", CompanyJobAgreements.as_view(), name="company_job_agreements"),
     path("", RedirectView.as_view(pattern_name="company_login", permanent=False)),
     path("company/login/", CompanyLogin.as_view(), name="company_login"),
     path("company/dashboard/", CompanyDashboard.as_view(), name="company_dashboard"),
@@ -16,9 +22,12 @@ urlpatterns = [
     path("company/agreements/", include("agreements.urls")),
     path("client/login/", ClientLogin.as_view(), name="client_login"),
     path("client/login/<uuid:invitation_id>/", ClientLogin.as_view(), name="client_invitation"),
+    path("client/portal/<uuid:invitation_id>/", ClientPortal.as_view(), name="client_portal"),
     path("client/session/", ClientSession.as_view(), name="client_session"),
     path("client/agreements/<uuid:invitation_id>/", ClientAgreement.as_view(), name="client_agreement"),
     path("client/agreements/<uuid:invitation_id>/signing/", ClientAgreementSigning.as_view(), name="client_agreement_signing"),
+    path("client/agreements/<uuid:invitation_id>/assistant/", ClientAgreementAssistant.as_view(), name="client_agreement_assistant"),
+    path("client/agreements/<uuid:invitation_id>/completed.pdf", ClientCompletedArtifact.as_view(), name="client_completed_pdf"),
     path("client/agreements/<uuid:invitation_id>/pages/<int:page_number>/", ClientAgreement.as_view(), name="client_agreement_page"),
     path("client/logout/", ClientLogout.as_view(), name="client_logout"),
 ]

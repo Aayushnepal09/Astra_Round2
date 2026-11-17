@@ -151,6 +151,11 @@ class AgreementFinalizer:
                 "recipientId": str(s.recipient_id), "submissionId": str(s.pk),
                 "submittedAt": s.submitted_at.isoformat(), "signatureMethod": s.signature_method,
                 "companyUserId": s.company_user_id, "consentText": s.consent_text,
+                "verificationInvitationId": str(s.invitation_id) if s.invitation_id else None,
+                "verificationRequestId": s.invitation.request_ref if s.invitation_id else None,
+                "verifiedAt": s.invitation.used_at.isoformat() if s.invitation_id and s.invitation.used_at else None,
+                "accessMethod": ('verified_client_portal' if s.invitation_id and s.invitation.request_ref != str(issued.pk)
+                                 else 'verified_invitation' if s.invitation_id else 'company_session'),
             } for s in submissions],
             "events": [
                 {"type": "request_issued", "at": issued.created_at.isoformat()},

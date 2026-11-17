@@ -85,6 +85,10 @@ def establish_client_session(request, invitation):
         "client_invitation": str(invitation.pk),
         "client_started": now, "client_last_seen": now,
     })
+    from client_files.portal_access import scope_for
+    scope = scope_for(invitation)
+    if scope:
+        request.session['client_portal'] = scope
     request.session.set_expiry(settings.CLIENT_SESSION_IDLE)
 
 
@@ -100,16 +104,26 @@ def client_identity(request, touch=True):
         return None
     invitation = ClientInvitation.objects.filter(
         pk=invitation_id, used_at__isnull=False,
-        revoked_at__isnull=True, company__is_active=True,
+        company__is_active=True,
     ).first()
     if invitation is None:
         request.session.flush()
         return None
     from client_files.models import SigningAccess
     from client_files.signing import signing_recipient
-    if SigningAccess.objects.filter(invitation=invitation).exists() and signing_recipient(invitation) is None:
+    from client_files.portal_access import scope_for, scope_matches, available_recipients
+    scope = request.session.get('client_portal')
+    if scope:
+        if not scope_matches(invitation, scope) or not available_recipients(scope).exists():
+            request.session.flush()
+            return None
+    elif invitation.revoked_at or (SigningAccess.objects.filter(invitation=invitation).exists() and signing_recipient(invitation) is None):
         request.session.flush()
         return None
+    else:
+        scope = scope_for(invitation)
+        if scope:
+            request.session['client_portal'] = scope
     if touch:
         request.session["client_last_seen"] = now
         request.session.set_expiry(max(1, min(settings.CLIENT_SESSION_IDLE, int(settings.CLIENT_SESSION_MAX - (now - started)))))

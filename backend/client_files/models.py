@@ -6,6 +6,55 @@ from django.db import models
 from django.db.models.functions import Lower
 
 
+class CompanyClient(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    company = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="clients")
+    creation_key = models.UUIDField(default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=200)
+    email = models.EmailField(blank=True)
+    signer_name = models.CharField(max_length=200, blank=True)
+    signer_email = models.EmailField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name", "id"]
+        constraints = [models.UniqueConstraint(fields=["company", "creation_key"], name="client_company_key_uniq")]
+
+    def save(self, *args, **kwargs):
+        for name in ("name", "email", "signer_name", "signer_email"):
+            value = getattr(self, name).strip()
+            setattr(self, name, value.lower() if name.endswith("email") else value)
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+
+class ClientJob(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    company = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="client_jobs")
+    client = models.ForeignKey(CompanyClient, on_delete=models.PROTECT, related_name="jobs")
+    creation_key = models.UUIDField(default=uuid.uuid4, editable=False)
+    reference = models.CharField(max_length=128)
+    title = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(fields=["company", "creation_key"], name="job_company_key_uniq"),
+            models.UniqueConstraint("company", Lower("reference"), name="job_company_ref_uniq"),
+        ]
+
+    def clean(self):
+        if self.client_id and self.client.company_id != self.company_id:
+            raise ValidationError("Choose a client in this workspace.")
+
+    def save(self, *args, **kwargs):
+        self.reference = self.reference.strip()
+        self.title = self.title.strip()
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+
 class ClientFile(models.Model):
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft · needs setup"
@@ -25,6 +74,7 @@ class ClientFile(models.Model):
         editable=False,
     )
     reference = models.CharField(max_length=128)
+    job = models.ForeignKey(ClientJob, on_delete=models.PROTECT, null=True, blank=True, related_name="agreements", editable=False)
     title = models.CharField(max_length=200, blank=True)
     client_name = models.CharField(max_length=200)
     client_email = models.EmailField(blank=True)
@@ -84,8 +134,12 @@ class ClientFile(models.Model):
 
     def clean(self):
         super().clean()
+        if self.job_id and self.job.company_id != self.company_id:
+            raise ValidationError("The agreement must belong to a job in this workspace.")
         if self.template_version_id and self.template_version.agreement.company_id != self.company_id:
             raise ValidationError({"template_version": "Choose a published version from this workspace."})
+        if self.template_version_id and self.template_version.agreement.job_id and self.template_version.agreement.job_id != self.job_id:
+            raise ValidationError({"template_version": "This agreement was prepared for a different job."})
         from .preparation import PreparationValues
         PreparationValues.validate(self.template_version if self.template_version_id else None,
                                    self.preparation_values, complete=False)
@@ -140,6 +194,8 @@ class SigningRequest(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     client_file = models.ForeignKey(ClientFile, on_delete=models.PROTECT, related_name="signing_requests")
+    client = models.ForeignKey(CompanyClient, on_delete=models.PROTECT, null=True, blank=True,
+                               related_name="issued_agreements", editable=False)
     template_version = models.ForeignKey("agreements.TemplateVersion", on_delete=models.PROTECT)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField(null=True, blank=True)
@@ -163,6 +219,8 @@ class SigningRequest(models.Model):
         super().clean()
         if self.client_file.company_id != self.template_version.agreement.company_id:
             raise ValidationError("Requests must use a published version in their own workspace.")
+        if self.client_id and self.client.company_id != self.client_file.company_id:
+            raise ValidationError("The issued client must belong to this workspace.")
         if self._state.adding and self.client_file.template_version_id != self.template_version_id:
             raise ValidationError("New requests must use the file's selected published version.")
         if self.replaces_id and (self.replaces.client_file_id != self.client_file_id
@@ -174,6 +232,7 @@ class SigningRequest(models.Model):
     def save(self, *args, **kwargs):
         if not self._state.adding:
             raise ValidationError("Issued request bindings cannot be changed.")
+        self.client_id = self.client_file.job.client_id if self.client_file.job_id else None
         self.full_clean()
         kwargs["force_insert"] = True
         return super().save(*args, **kwargs)
@@ -244,18 +303,21 @@ class SigningSubmission(models.Model):
         if (self.signing_request_id != issued.pk or self.template_version_id != issued.template_version_id
                 or self.pdf_sha256 != issued.template_version.pdf_sha256
                 or issued.client_file.company_id != issued.template_version.agreement.company_id
-                or issued.client_file.template_version_id != self.template_version_id
                 or self.signature_method != "typed"):
             raise ValidationError("The submission must belong to this verified signer and exact issued agreement.")
         if self.recipient.role == "client":
             if (self.company_user_id or not self.invitation_id
-                    or not SigningAccess.objects.filter(invitation_id=self.invitation_id, recipient=self.recipient).exists()):
-                raise ValidationError("Client submissions require their verified invitation.")
+                    or not self.client_verification_matches()):
+                raise ValidationError("Client submissions require their verified invitation or client portal identity.")
         elif self.recipient.role == "company":
             if self.invitation_id or self.company_user_id != issued.client_file.company_id:
                 raise ValidationError("Company submissions require the authenticated workspace owner.")
         else:
             raise ValidationError("Unsupported signer role.")
+
+    def client_verification_matches(self):
+        from .portal_access import invitation_authorizes
+        return invitation_authorizes(self.invitation, self.recipient)
 
     class Meta:
         constraints = [models.CheckConstraint(
