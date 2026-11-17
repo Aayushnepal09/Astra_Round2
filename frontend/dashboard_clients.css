@@ -1,0 +1,43 @@
+/* Client disclosure rows, scoped to the company dashboard. */
+#view-files #client-directory .client-list { margin:0 24px; }
+#view-files #client-directory #client-directory-status { margin:0; padding:0 24px 18px; font-size:12px; }
+#view-files #client-directory .client-row { margin:0 0 12px; border:1px solid var(--line); border-radius:9px; overflow:clip; background:white; }
+#view-files #client-directory .client-row > summary { display:grid; grid-template-columns:40px minmax(150px,1fr) auto auto; align-items:center; gap:16px; padding:20px; list-style:none; color:var(--ink); transition:background .15s ease; }
+#view-files #client-directory .client-row > summary::-webkit-details-marker { display:none; }
+#view-files #client-directory .client-row > summary::marker { content:''; }
+#view-files #client-directory .client-row > summary:hover { background:#faf9ff; }
+#view-files #client-directory .client-row[open] > summary { background:#f9f8ff; }
+#view-files #client-directory .client-row > summary:focus-visible { outline:2px solid var(--blue); outline-offset:-3px; border-radius:8px; }
+#view-files #client-directory .client-avatar { display:flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:9px; background:var(--blue-soft); color:var(--blue); font-size:13px; font-weight:650; }
+#view-files #client-directory .client-identity { min-width:0; gap:4px; }
+#view-files #client-directory .client-identity strong { font-size:14px; line-height:1.5; }
+#view-files #client-directory .client-identity > span { color:var(--muted); font-size:11px; }
+#view-files #client-directory .client-counts { float:none; display:grid; grid-template-columns:repeat(2,minmax(50px,auto)) minmax(100px,auto) minmax(70px,auto); gap:20px; padding:0; margin:0 12px 0 0; }
+#view-files #client-directory .client-stat { display:flex; flex-direction:column; align-items:flex-start; gap:3px; color:var(--muted); font-size:10px; line-height:1.5; }
+#view-files #client-directory .client-stat strong { font-size:15px; font-weight:600; font-variant-numeric:tabular-nums; color:var(--ink); }
+#view-files #client-directory .client-stat.waiting strong { color:#98620f; }
+#view-files #client-directory .client-stat.completed strong { color:#188569; }
+#view-files #client-directory .client-expand { display:flex; align-items:center; gap:10px; color:var(--blue); font-size:11px; white-space:nowrap; }
+#view-files #client-directory .client-expand svg { width:17px; height:17px; transform:rotate(-90deg); transition:transform .15s ease; }
+#view-files #client-directory .client-row[open] > summary .client-expand svg { transform:rotate(0); }
+#view-files #client-directory .client-content { margin:0; padding:18px 20px 22px; border:0; border-top:1px solid var(--line); background:#fbfcff; }
+#view-files #client-directory .client-create-job { margin:0 0 16px; }
+#view-files #client-directory .client-create-job > summary { display:inline-flex; align-items:center; min-height:38px; padding:8px 13px; border:1px solid var(--line); border-radius:6px; background:white; color:var(--blue); font-size:12px; font-weight:500; list-style:none; }
+#view-files #client-directory .client-create-job > summary::-webkit-details-marker { display:none; }
+#view-files #client-directory .client-job { margin:0 0 16px; border:0; }
+#view-files #client-directory .client-job > summary { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:15px 0; list-style:none; font-size:13px; font-weight:600; border-bottom:1px solid var(--line); }
+#view-files #client-directory .client-job > summary::-webkit-details-marker { display:none; }
+#view-files #client-directory .client-job > summary::after { content:''; flex:0 0 7px; height:7px; margin-right:5px; border-right:1.5px solid var(--muted); border-bottom:1.5px solid var(--muted); transform:rotate(-45deg); }
+#view-files #client-directory .client-job[open] > summary::after { transform:rotate(45deg); }
+#view-files #client-directory .agreement-table-scroll { background:white; }
+#view-files #client-directory .agreement-table-toolbar { padding:14px 0; }
+#view-files #client-directory .agreement-row-actions { gap:8px; }
+#view-files #client-directory .job-actions { margin:16px 0 8px; }
+#view-files #client-directory .job-add-agreements > summary { color:var(--blue); font-weight:500; font-size:12px; }
+@media(max-width:1150px) { #view-files #client-directory .client-expand > span { display:none; } #view-files #client-directory .client-counts { gap:14px; } }
+@media(max-width:800px) { #view-files #client-directory .client-list { margin-inline:16px; } #view-files #client-directory #client-directory-status { padding-inline:16px; } #view-files #client-directory .client-row > summary { grid-template-columns:36px minmax(0,1fr) 20px; gap:12px; padding:16px; } #view-files #client-directory .client-avatar { width:36px; height:36px; } #view-files #client-directory .client-counts { grid-column:2/4; grid-row:2; grid-template-columns:repeat(4,minmax(0,1fr)); margin:0; gap:8px; } #view-files #client-directory .client-stat { font-size:9px; } #view-files #client-directory .client-expand { grid-column:3; grid-row:1; } #view-files #client-directory .client-expand > span { display:none; } #view-files #client-directory .client-content { padding:12px; } #view-files #client-directory .client-identity strong { font-size:13px; } }
+@media(prefers-reduced-motion:reduce) { #view-files #client-directory .client-expand svg,#view-files #client-directory .client-row > summary { transition:none; } }
+
+@media(min-width:801px) and (max-width:1100px) { #view-files #client-directory .client-row > summary { grid-template-columns:40px minmax(0,1fr) 20px; } #view-files #client-directory .client-counts { grid-column:2/4; grid-row:2; grid-template-columns:repeat(4,minmax(0,1fr)); margin:0; } #view-files #client-directory .client-expand { grid-column:3; grid-row:1; } }
+
+#view-files #client-directory .client-identity .client-action-needed { display:inline-flex; width:fit-content; margin-top:3px; padding:3px 7px; border-radius:4px; background:#fff5e5; color:#98620f; font-size:10px; font-weight:500; }

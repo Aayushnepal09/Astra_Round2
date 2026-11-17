@@ -1,21 +1,22 @@
 import { SessionClient } from './shared/ui.js';
-import { AgreementWorkspace } from './agreements.js';
+import { AgreementWorkspace } from './agreements.js?v=workflow2';
+import { ClientDirectory } from './client_workspace.js?v=countersign1';
 
 class WorkspaceDashboard {
   static views = new Map([
-    ['overview', { title: 'Your workspace, a little simpler.', description: 'A clear view of your client files, from first agreement to ready to start.', label: 'Overview' }],
-    ['files', { title: 'Every client. Everything in view.', description: 'Keep each job, agreement and signing stage together.', label: 'Client files' }],
-    ['templates', { title: 'Good agreements start here.', description: 'Your company’s documents, prepared for the next client.', label: 'Agreement templates' }],
-    ['help', { title: 'Let’s make the next step simple.', description: 'A little help with your agreements and workspace.', label: 'Help & guidance' }],
+    ['overview', { title: 'Overview', description: 'Agreements that need your attention, from preparation to completion.', label: 'Overview' }],
+    ['files', { title: 'Clients & agreements', description: 'Every client, job and agreement in one place.', label: 'Clients' }],
+    ['templates', { title: 'Agreement templates', description: 'Prepare a document once. Reuse its ready version for the next client.', label: 'Agreement templates' }],
+    ['help', { title: 'Help & guidance', description: 'How preparation, signing and demo delivery work.', label: 'Help & guidance' }],
   ]);
 
   static statuses = new Map([
-    ['draft', { label: 'Draft · needs setup', tone: 'neutral' }],
+    ['draft', { label: 'Draft', tone: 'neutral' }],
     ['issuing', { label: 'Preparing request', tone: 'info' }],
     ['awaiting_client', { label: 'Awaiting client', tone: 'waiting' }],
-    ['awaiting_company', { label: 'Awaiting company', tone: 'waiting' }],
+    ['awaiting_company', { label: 'Needs your signature', tone: 'waiting' }],
     ['finalizing', { label: 'Finalizing', tone: 'info' }],
-    ['completed', { label: 'Ready to start', tone: 'success' }],
+    ['completed', { label: 'Completed', tone: 'success' }],
     ['cancelled', { label: 'Cancelled', tone: 'neutral' }],
     ['expired', { label: 'Expired', tone: 'error' }],
   ]);
@@ -23,9 +24,11 @@ class WorkspaceDashboard {
   constructor(data) {
     this.client = new SessionClient();
     this.agreements = new AgreementWorkspace(route => this.navigate(route));
+    this.directory = new ClientDirectory();
     this.files = new Map();
     this.dateFormatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     this.filter = 'all';
+    this.grouping = new URLSearchParams(location.search).has('client') ? 'clients' : 'agreements';
     this.search = document.querySelector('#file-search');
     this.sort = document.querySelector('#file-sort');
     this.account = document.querySelector('.account-menu');
@@ -41,7 +44,11 @@ class WorkspaceDashboard {
     document.body.classList.add('enhanced');
     this.setMenu(false);
     this.bindEvents();
-    this.navigate(window.location.hash.slice(1), false, false);
+    this.statusTimer = setInterval(() => { if (!document.hidden && this.activeView === 'files' && !this.requestController) this.refreshWorkspace(); },15000);
+    window.addEventListener('focus', () => { if(this.activeView === 'files') this.refreshWorkspace(); });
+    window.addEventListener('pagehide', () => clearInterval(this.statusTimer));
+    const initialRoute = window.location.hash.slice(1) || 'files';
+    this.navigate(initialRoute, false, false);
     this.applySnapshot(data);
   }
 
@@ -61,12 +68,15 @@ class WorkspaceDashboard {
       }
       const metric = event.target.closest('[data-filter-link]');
       if (metric) {
+        
         this.search.value = '';
         this.setFilter(metric.dataset.filterLink);
         this.navigate('files');
       }
       const filter = event.target.closest('[data-filter]');
       if (filter) this.setFilter(filter.dataset.filter);
+      const grouping = event.target.closest('[data-grouping]');
+      if (grouping) this.setGrouping(grouping.dataset.grouping);
       if (!event.target.closest('.account-menu')) this.account.open = false;
     });
     window.addEventListener('popstate', () => this.navigate(window.location.hash.slice(1), false));
@@ -81,7 +91,15 @@ class WorkspaceDashboard {
       this.requestNumber++;
       this.requestController?.abort();
       window.clearTimeout(this.searchTimer);
-      this.searchTimer = window.setTimeout(() => this.refreshWorkspace(), 250);
+      this.searchTimer = window.setTimeout(() => {
+        if (this.grouping === 'clients') { this.directory.search.value = this.search.value; this.directory.page = 1; this.directory.load(); }
+        else this.refreshWorkspace();
+      }, 250);
+    });
+    document.querySelector('#new-client-toggle').addEventListener('click', () => {
+      this.setGrouping('clients');
+      document.querySelector('#new-client-details').open = true;
+      this.directory.newClientForm.elements.name.focus();
     });
     this.sort.addEventListener('change', () => {
       this.page = 1;
@@ -118,6 +136,8 @@ class WorkspaceDashboard {
   }
 
   navigate(view, updateHistory = true, focus = true) {
+    const clientShortcut = view === 'clients';
+    if (clientShortcut) view = 'files';
     let route = view;
     view = view.split('/')[0];
     if (!WorkspaceDashboard.views.has(view)) view = 'overview';
@@ -126,6 +146,7 @@ class WorkspaceDashboard {
       window.history.replaceState(null, '', `#${this.agreements.route || 'templates'}`);
       return;
     }
+    this.activeView = view;
     const current = WorkspaceDashboard.views.get(view);
     document.querySelectorAll('.workspace-view').forEach(section => { section.hidden = section.id !== `view-${view}`; });
     document.querySelectorAll('.sidebar .nav-link').forEach(link => {
@@ -140,6 +161,9 @@ class WorkspaceDashboard {
     document.title = `${current.label} · Astra`;
     if (updateHistory && window.location.hash !== `#${route}`) window.history.pushState(null, '', `#${route}`);
     this.agreements.navigate(route);
+    document.querySelector('.reference-create').hidden = view !== 'files';
+    if (view === 'files') this.setGrouping(clientShortcut ? 'clients' : this.grouping);
+    if (view === 'files' && this.pagination) this.refreshWorkspace();
     this.setMenu(false);
     if (focus) {
       heading.tabIndex = -1;
@@ -164,13 +188,35 @@ class WorkspaceDashboard {
     for (const file of data.files) this.files.set(file.id, file);
     this.recentFiles = data.recentFiles;
     this.counts = data.counts;
+    document.querySelector('#client-nav-count').textContent = data.clientCount || 0;
     this.pagination = data.pagination;
     this.page = data.pagination.number;
     this.renderSummary();
     this.renderFiles();
   }
 
+  setGrouping(grouping, refresh = true) {
+    this.grouping = grouping === 'agreements' ? 'agreements' : 'clients';
+    const clients = this.grouping === 'clients';
+    this.directory.root.hidden = !clients;
+    document.querySelector('#agreement-list-view').hidden = clients;
+    this.sort.closest('label').hidden = clients;
+    this.search.placeholder = clients ? 'Search by client, email or job reference…' : 'Search by agreement, client or reference…';
+    document.querySelector('#grouping-hint').textContent = clients ? 'Open a client to see their jobs and agreements. Choose a status to search all agreements.' : 'Search agreements across every client and job.';
+    document.querySelectorAll('[data-grouping]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.grouping === this.grouping)));
+    if (clients) {
+      this.filter = 'all';
+      document.querySelectorAll('[data-filter]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.filter === 'all')));
+      if (this.directory.search.value !== this.search.value) {
+        this.directory.search.value = this.search.value;
+        this.directory.page = 1;
+        this.directory.load();
+      } else this.directory.show();
+    } else if (refresh && this.pagination) this.refreshWorkspace();
+  }
+
   setFilter(filter) {
+    this.setGrouping('agreements', false);
     this.filter = filter;
     this.page = 1;
     document.querySelectorAll('[data-filter]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.filter === filter)));
@@ -213,23 +259,29 @@ class WorkspaceDashboard {
     const fragment = document.createDocumentFragment();
     for (const file of files) {
       const row = document.createElement('tr');
-      const nameCell = row.insertCell();
+      const cell = label => { const value = row.insertCell(); value.dataset.label = label; return value; };
+      const nameCell = cell('Agreement / file');
       const name = document.createElement('a');
-      name.className = 'file-name';
-      name.href = file.detailUrl;
-      name.textContent = file.clientName || 'Client';
-      const reference = document.createElement('span');
-      reference.className = 'file-reference';
-      reference.textContent = [file.reference, file.title].filter(Boolean).join(' · ');
-      nameCell.append(name, reference);
+      name.className = 'file-name'; name.href = file.detailUrl;
+      name.textContent = file.title || file.reference;
+      const icon = document.createElement('span'); icon.className = 'reference-file-icon'; icon.setAttribute('aria-hidden', 'true');
+      icon.innerHTML = '<svg><use href="#icon-document"/></svg>';
+      const copy = document.createElement('div');
+      const reference = document.createElement('span'); reference.className = 'file-reference'; reference.textContent = file.reference;
+      copy.append(name, reference); const identity = document.createElement('div'); identity.className = 'reference-file-name'; identity.append(icon, copy); nameCell.append(identity);
+      if (container.id === 'all-file-rows') cell('Client').textContent = file.clientName;
       const state = WorkspaceDashboard.statuses.get(file.status) || { label: 'Status unavailable', tone: 'neutral' };
-      const badge = document.createElement('span');
-      badge.className = `status-badge ${file.needsAttention ? 'error' : state.tone}`;
-      badge.textContent = file.needsAttention ? `${state.label} · needs attention` : state.label;
-      row.insertCell().append(badge);
-      const updated = row.insertCell();
-      updated.textContent = this.timestamp(file) ? this.dateFormatter.format(new Date(file.updatedAt)) : '—';
-      fragment.append(row);
+      const processingError = file.needsAttention && file.status === 'finalizing';
+      const badge = document.createElement('span'); badge.className = `status-badge ${processingError ? 'error' : state.tone}`;
+      badge.textContent = processingError ? 'Processing needs attention' : state.label;
+      const detail = document.createElement('span'); detail.className = 'file-reference';
+      detail.textContent = ({draft:'Not sent yet',awaiting_client:'Client signature pending',awaiting_company:'Client signed · your company signature is required',completed:'All signatures and final records saved',cancelled:'Further signing stopped',expired:'Signing deadline passed',finalizing:'Preparing final records'})[file.status] || '';
+      cell('Agreement status').append(badge,detail);
+      const updated = cell('Updated'); updated.textContent = this.timestamp(file) ? this.dateFormatter.format(new Date(file.updatedAt)) : '—';
+      const time = document.createElement('span'); time.className = 'file-reference'; time.textContent = this.timestamp(file) ? new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(new Date(file.updatedAt)) : ''; updated.append(time);
+      const action = document.createElement('a'); action.className = file.status === 'awaiting_company' ? 'button compact' : 'file-next-action'; action.href = file.countersignUrl || file.detailUrl;
+      action.textContent = ({draft:'Continue setup',issuing:'Check request',awaiting_client:'View request',awaiting_company:'Sign for company',finalizing:file.needsAttention?'Resolve issue':'Finish processing',completed:'View signed file',cancelled:'Prepare replacement',expired:'Prepare replacement'})[file.status] || 'Open file';
+      action.setAttribute('aria-label', `${action.textContent} · ${file.clientName || 'Client'}`); cell('Next step').append(action); fragment.append(row);
     }
     container.replaceChildren(fragment);
   }

@@ -79,6 +79,17 @@
 .agreement-save-actions .has-error { color: #9c3028; }
 .agreement-field-properties input, .agreement-field-properties select { min-width: 0; width: 100%; }
 .agreement-field-properties input[type="checkbox"] { width: auto; }
+.agreement-preparation-layout { display: grid; min-width: 0; gap: 20px; }
+.agreement-preparation-layout:has(.agreement-field-editor:not([hidden])) { grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); align-items: start; }
+.agreement-preparation-layout .agreement-field-editor { position: sticky; top: 16px; min-width: 0; max-height: 80vh; overflow: auto; margin: 0; }
+.agreement-preparation-layout .agreement-field-properties { grid-template-columns: minmax(0, 1fr); }
+.agreement-field-advanced { grid-column: 1 / -1; }
+.agreement-field-advanced > summary { min-height: 44px; padding-block: 12px; color: var(--ink); font-size: 12px; font-weight: 700; cursor: pointer; }
+@media (max-width: 850px) {
+  .agreement-preparation-layout:has(.agreement-field-editor:not([hidden])) { grid-template-columns: minmax(0, 1fr); }
+  .agreement-preparation-layout .agreement-field-editor { position: static; max-height: none; }
+  .agreement-preparation-layout .agreement-page-viewport { max-height: 50vh; }
+}
 .agreement-publish-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-bottom: 8px; }
 .agreement-publish-controls label { display: grid; flex: 1 1 230px; gap: 7px; font-size: 12px; color: var(--ink); }
 .agreement-publish-controls input { width: 100%; min-height: 42px; padding: 10px; border: 1px solid #bed0e8; border-radius: var(--radius); background: var(--surface); color: var(--ink); }
@@ -87,3 +98,28 @@
 .agreement-published-versions ul { display: grid; gap: 10px; padding-left: 18px; font-size: 12px; }
 .agreement-published-versions a { color: var(--blue); text-underline-offset: 3px; }
 #agreement-publish-status { font-size: 12px; line-height: 1.6; }
+.agreement-ai-fields { margin-block: 20px; padding-block: 18px; border-block: 1px solid var(--line); }
+#agreement-suggestion-status, #agreement-suggestion-list { font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
+#agreement-suggestion-list { display: grid; gap: 20px; padding-left: 20px; }
+#agreement-suggestion-list:empty { display: none; }
+#agreement-suggestion-list p { margin: 6px 0; }
+.agreement-suggestion-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.agreement-suggestion-actions button { min-height: 44px; }
+.agreement-suggestion-feedback { min-height: 1.65em; font-weight: 700; color: var(--ink); }
+.agreement-suggestion-confirm { margin-top: 12px; padding-block: 12px; border-block: 1px solid var(--line); }
+.agreement-suggestion-confirm button { margin: 4px 8px 4px 0; min-height: 44px; }
+.agreement-suggestion-layer { position: absolute; inset: 0; pointer-events: none; }
+.agreement-proposed-field { position: absolute; border: 2px dashed var(--warning); background: var(--warning-soft); color: var(--ink); font-size: 11px; overflow: hidden; }
+.agreement-page-viewport { max-height: none; overflow: auto; }
+.agreement-page-viewport.is-enlarged .document-page { width: 140%; }
+.agreement-page-viewport.is-enlarged .document-page img { width: 100%; max-width: 100%; }
+.agreement-preview-toolbar { position: sticky; top: 0; z-index: 4; background: var(--surface); }
+.agreement-preparation-layout .agreement-field-editor { top: 84px; max-height: calc(100vh - 110px); }
+.agreement-ai-fields { margin: 0 0 20px; padding: 0 0 20px; border-top: 0; scroll-margin-top: 96px; }
+.agreement-ai-fields h3 { margin: 0 0 12px; font-size: 18px; }
+.agreement-ai-fields > .button { min-height: 44px; }
+@media (max-width: 850px) {
+  .agreement-preparation-layout .agreement-page-viewport { max-height: none; }
+  .agreement-preparation-layout .agreement-field-editor { position: static; max-height: none; grid-row: 1; }
+  .agreement-preview-toolbar { position: static; }
+}

@@ -298,3 +298,8 @@
   .metric > span .icon { display: none; }
   .workspace-footer { flex-direction: column; gap: 4px; }
 }
+.templates-workspace > .company-workflow { margin-inline: 28px; }
+.file-next-action { display: inline-flex; align-items: center; min-height: 44px; color: var(--blue); font-size: 12px; font-weight: 700; text-underline-offset: 4px; }
+.file-next-action:hover { color: var(--ink); }
+.file-next-action:focus-visible { outline: 2px solid var(--blue); outline-offset: 4px; }
+@media (max-width: 600px) { .templates-workspace > .company-workflow { margin-inline: 18px; } }

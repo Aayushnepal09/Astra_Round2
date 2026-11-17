@@ -23,6 +23,10 @@ class ClientFileEditor {
     this.buttonLabel = document.querySelector('#save-draft-label');
     this.saveError = document.querySelector('#draft-save-error');
     this.saveStatus = document.querySelector('#draft-save-status');
+    this.conflictNotice = document.querySelector('#draft-conflict');
+    this.reloadLatest = document.querySelector('#reload-latest-draft');
+    this.draftConflict = false;
+    this.reloadLatest.addEventListener('click', () => this.reloadLatestDraft());
     this.sessionError = document.querySelector('#draft-session-error');
     this.sessionRetry = document.querySelector('#retry-session');
     this.heading = document.querySelector('#draft-title');
@@ -34,7 +38,18 @@ class ClientFileEditor {
     this.creationKey = data.creationKey;
     this.isNew = !data.id;
     this.issued = data.status === 'awaiting_client';
+    this.recoveryRequired = false;
     this.requestBusy = false;
+    this.cancellationPending = false;
+    this.cancelButton = document.querySelector('#cancel-request');
+    this.prepareButton = document.querySelector('#prepare-replacement');
+    this.stateReload = document.querySelector('#request-state-reload');
+    this.cancelButton.addEventListener('click', () => this.changeRequest('cancel'));
+    this.prepareButton.addEventListener('click', () => this.changeRequest('prepare'));
+    this.stateReload.addEventListener('click', () => this.reloadLatestDraft());
+    document.querySelector('#company-countersign').addEventListener('click', event => {
+      if (this.requestBusy || this.cancellationPending) event.preventDefault();
+    });
     this.sendButton = document.querySelector('#send-demo');
     this.invitation = null;
     this.sendButton.addEventListener('click', () => this.requestInvitation());
@@ -43,6 +58,13 @@ class ClientFileEditor {
     document.querySelector('#demo-refresh').addEventListener('click', () => this.loadInvitation());
     for (const kind of ['link', 'code']) document.querySelector(`#demo-copy-${kind}`).addEventListener('click', () => this.copyInvitation(kind));
     setInterval(() => this.renderCountdown(), 1000);
+    const refreshIssuedStatus = () => {
+      if (!document.hidden && this.sessionReady && !this.checkingSession && !this.requestBusy && !this.saving && !this.dirty
+          && ['awaiting_client','awaiting_company','finalizing'].includes(this.invitation?.progress)) this.loadInvitation();
+    };
+    const statusTimer = setInterval(refreshIssuedStatus,15000);
+    window.addEventListener('focus', refreshIssuedStatus);
+    window.addEventListener('pagehide', () => clearInterval(statusTimer));
     this.checkingSession = false;
     this.sessionReady = false;
     this.saving = false;
@@ -50,6 +72,8 @@ class ClientFileEditor {
     this.guardingLeave = false;
     this.allowLeave = false;
     this.templates = new Map();
+    this.preparationInputs = new Map();
+    this.preparationValues = {};
     this.templatePage = 1;
     this.templatesLoading = false;
     this.templatesStarted = false;
@@ -78,23 +102,29 @@ class ClientFileEditor {
   }
 
   readValues() {
-    return Object.fromEntries([...this.inputs].map(([name, input]) => [name, input.value]));
+    return { ...Object.fromEntries([...this.inputs].map(([name, input]) => [name, input.value])),
+      preparation_values: Object.fromEntries([...this.preparationInputs].map(([id, input]) => [id, input.value])) };
   }
 
   fileValues(file) {
-    return Object.fromEntries([...ClientFileEditor.fieldNames].map(([name, property]) => [name, file[property] || '']));
+    return { ...Object.fromEntries([...ClientFileEditor.fieldNames].map(([name, property]) => [name, file[property] || ''])),
+      preparation_values: file.preparationValues || {} };
   }
 
   normalizedSnapshot(values) {
-    return JSON.stringify(Object.fromEntries([...ClientFileEditor.fieldNames.keys()].map(name => {
+    return JSON.stringify({ ...Object.fromEntries([...ClientFileEditor.fieldNames.keys()].map(name => {
       const value = (values[name] || '').trim();
       return [name, name.endsWith('_email') ? value.toLowerCase() : value];
-    })));
+    })), preparation_values: Object.fromEntries(Object.entries(values.preparation_values || {}).sort(([a], [b]) => a.localeCompare(b)).map(([id, value]) => [id, value.trim()])) });
   }
 
   applyFile(file) {
     if (file.selectedTemplate) this.addTemplateOption(file.selectedTemplate);
-    for (const [name, value] of Object.entries(this.fileValues(file))) this.inputs.get(name).value = value;
+    for (const [name, value] of Object.entries(this.fileValues(file))) {
+      if (name !== 'preparation_values') this.inputs.get(name).value = value;
+    }
+    this.preparationValues = file.preparationValues || {};
+    this.renderPreparation();
     this.renderTemplateSetup();
     this.updateFileMetadata(file);
   }
@@ -103,18 +133,36 @@ class ClientFileEditor {
     if (file.id) {
       document.body.dataset.requestUrl = file.requestUrl;
       this.issued = file.status !== 'draft';
-      this.heading.textContent = file.clientName;
+      this.savedUpdatedAt = file.updatedAt;
+      this.loadedRequestId = file.currentRequestId || null;
+      this.replacesRequestId = file.replacesRequestId || null;
+      this.heading.textContent = file.job ? `${file.title || 'Agreement'} · ${file.clientName}` : file.clientName;
       document.title = `${file.clientName} · Astra`;
+      const context = document.querySelector('#agreement-job-context');
+      context.hidden = !file.job;
+      if (file.job) {
+        document.querySelector('#agreement-job-link').href = file.job.workspaceUrl;
+        document.querySelector('#agreement-job-link').textContent = file.job.clientName;
+        document.querySelector('#agreement-job-name').textContent = ` · Job/file ${file.job.reference}${file.job.title ? ' · ' + file.job.title : ''}`;
+      }
     }
+    this.renderRequestActions(file);
     const timestamp = Date.parse(file.updatedAt);
     this.savedAt.textContent = timestamp ? `Last saved ${this.dateFormat.format(timestamp)}` : 'Not saved yet';
   }
 
   handleInput(event) {
-    if (!this.inputs.has(event.target.name)) return;
-    this.clearFieldError(event.target.name);
+    const preparation = event.target.dataset.preparationId;
+    if (!preparation && !this.inputs.has(event.target.name)) return;
+    if (!preparation) this.clearFieldError(event.target.name);
+    document.querySelector('#preparation_values-error').hidden = true;
+    for (const input of this.preparationInputs.values()) input.removeAttribute('aria-invalid');
     this.saveError.hidden = true;
     this.saveStatus.hidden = true;
+    if (event.target.name === 'template_version') {
+      this.preparationValues = {};
+      this.renderPreparation();
+    }
     if (event.target.name === 'template_version' && !this.selectedTemplate()?.roles.includes('company')) {
       for (const name of ['company_signer_name', 'company_signer_email']) {
         this.inputs.get(name).value = '';
@@ -129,21 +177,163 @@ class ClientFileEditor {
   updateState() {
     const busy = this.checkingSession || this.saving || this.requestBusy;
     this.fields.disabled = busy || !this.sessionReady || this.issued;
-    this.button.disabled = busy || !this.sessionReady || this.issued || (!this.isNew && !this.dirty);
-    this.sendButton.disabled = busy || !this.sessionReady || this.isNew || this.dirty;
+    this.button.disabled = busy || !this.sessionReady || this.issued || this.draftConflict || (!this.isNew && !this.dirty);
+    this.sendButton.disabled = busy || !this.sessionReady || this.isNew || this.dirty || this.recoveryRequired || this.draftConflict
+      || this.cancellationPending || ['cancelled', 'expired'].includes(this.requestState?.status) || (this.requestState?.status === 'draft' && this.issued);
+    this.reloadLatest.disabled = busy || !this.sessionReady;
+    this.stateReload.disabled = busy || !this.sessionReady;
+    this.cancelButton.disabled = busy || !this.sessionReady;
+    this.prepareButton.disabled = busy || !this.sessionReady || this.cancellationPending;
+    this.cancelButton.textContent = this.requestBusy && this.cancellationPending ? 'Cancellation pending…' : 'Cancel request';
     this.sendButton.textContent = this.requestBusy ? 'Checking request…' : 'Send request — Demo';
     this.sendButton.setAttribute('aria-busy', String(this.requestBusy));
-    document.querySelector('#demo-replace').disabled = busy || !this.sessionReady;
+    document.querySelector('#demo-replace').disabled = busy || !this.sessionReady || !this.canReplaceCode();
     document.querySelector('#demo-refresh').disabled = busy || !this.sessionReady;
     document.querySelector('#finalize-agreement').disabled = busy || !this.sessionReady;
+    document.querySelector('#company-countersign').setAttribute('aria-disabled', String(busy || this.cancellationPending));
     this.buttonLabel.textContent = this.saving ? 'Saving…' : this.checkingSession ? 'Checking session…' : 'Save draft';
     this.button.setAttribute('aria-busy', String(busy));
     this.form.setAttribute('aria-busy', String(busy));
+    if (this.recoveryReload) this.recoveryReload.disabled = busy || !this.sessionReady;
     this.unsavedNote.hidden = !this.dirty;
+    const reviewing = this.requestState?.status !== 'draft' || (!this.isNew && !this.dirty && !!this.selectedTemplate());
+    document.querySelectorAll('[data-file-step]').forEach(step => {
+      if (step.dataset.fileStep === (reviewing ? 'issue' : 'setup')) step.setAttribute('aria-current', 'step');
+      else step.removeAttribute('aria-current');
+    });
+    if (this.requestState?.status === 'draft') {
+      document.querySelector('#file-status').textContent = this.dirty ? 'Unsaved changes' : this.setupReady ? 'Ready to send' : 'Needs details';
+      document.querySelector('#demo-send-hint').textContent = this.isNew || this.dirty
+        ? 'Save your setup above first. Then review the selected version, recipients and company values before issuing.'
+        : 'Setup saved. Review the details above, then issue the request. Demo mode provides a link and code; no email is sent.';
+    }
     const needsGuard = !this.allowLeave && (this.dirty || this.saving);
     if (needsGuard === this.guardingLeave) return;
     window[needsGuard ? 'addEventListener' : 'removeEventListener']('beforeunload', this.beforeUnload);
     this.guardingLeave = needsGuard;
+  }
+
+  requireIssuedReload() {
+    if (this.recoveryRequired) return;
+    this.recoveryRequired = true;
+    const notice = document.createElement('section');
+    notice.className = 'draft-section';
+    notice.setAttribute('aria-labelledby', 'issued-recovery-heading');
+    const heading = document.createElement('h2');
+    heading.id = 'issued-recovery-heading';
+    heading.textContent = 'Local draft entries — request already issued';
+    const message = document.createElement('p');
+    message.className = 'draft-section-copy';
+    message.setAttribute('role', 'status');
+    message.textContent = 'Another tab or an earlier send issued the saved version. The entries below are your local draft, not a confirmed view of the issued details. Unsaved edits in this tab were not applied to that request. Copy any entries you need before reloading to view the issued details.';
+    this.recoveryReload = document.createElement('button');
+    this.recoveryReload.type = 'button';
+    this.recoveryReload.className = 'button secondary';
+    this.recoveryReload.textContent = 'Reload issued details';
+    this.recoveryReload.addEventListener('click', () => {
+      if (this.recoveryReload.disabled) return;
+      if (this.dirty && !window.confirm('Reload the issued details and discard the unsaved entries in this tab? Copy anything you need before continuing.')) return;
+      this.allowLeave = true;
+      this.updateState();
+      window.location.reload();
+    });
+    notice.append(heading, message, this.recoveryReload);
+    this.fields.before(notice);
+    this.saveStatus.hidden = true;
+    this.savedAt.textContent = 'Local draft shown — reload to view issued details';
+  }
+
+  reloadLatestDraft() {
+    if (this.reloadLatest.disabled) return;
+    if (this.dirty && !window.confirm('Load the latest saved details and discard the unsaved entries in this tab? Copy anything you need before continuing.')) return;
+    this.allowLeave = true;
+    this.updateState();
+    window.location.reload();
+  }
+
+  canReplaceCode() {
+    const invitation = this.invitation;
+    return Boolean(!this.cancellationPending && invitation?.invitationId && invitation.accessAvailable && invitation.canReplace
+      && ['expired', 'locked', 'verified'].includes(invitation.state)
+      && (invitation.progress === 'awaiting_client' || invitation.readOnly));
+  }
+
+  renderRequestActions(file) {
+    if (!file) return;
+    this.requestState = file;
+    const changed = (file.currentRequestId || null) !== (this.loadedRequestId || null) || (file.status === 'draft' && this.issued);
+    this.cancelButton.hidden = !file.canCancelRequest || changed;
+    this.prepareButton.hidden = !file.canPrepareReplacement || changed;
+    this.stateReload.hidden = !changed;
+    const history = document.querySelector('#request-history');
+    history.hidden = !file.id;
+    if (file.requestHistoryUrl) history.href = file.requestHistoryUrl;
+    document.querySelector('#demo-refresh').hidden = !file.id;
+    document.querySelector('#request-options').hidden = !file.id;
+    document.querySelector('#request-lifecycle-status').textContent = changed
+      ? 'The saved request state changed. Load the latest saved details before continuing. Your local entries are still here.'
+      : file.status === 'cancelled' ? 'Request cancelled. Further signing has stopped; existing signing records are retained.'
+      : file.status === 'expired' ? 'Signing deadline passed. Prepare a replacement to collect fresh signatures. Earlier signing records are retained.'
+      : file.replacesRequestId ? 'Replacement draft. Review the template, recipients and company-prepared values, save your setup, then select Send request — Demo. Earlier signatures and consent are not reused.' : '';
+    if (['cancelled', 'expired'].includes(file.status)) this.issued = true;
+    this.renderStage(file.status);
+  }
+
+  renderStage(status) {
+    const copy = {
+      draft: ['Review & issue', 'Review the template, recipients and company-prepared values. Save your setup before sending.', 'Saving setup does not issue a request. Sending freezes the selected version and recipients.'],
+      awaiting_client: ['Awaiting the client', 'The request is issued. Share the demo link and code below so the client can review and sign.', 'Issued details are fixed. Cancel an unfinished request before preparing corrected setup.'],
+      awaiting_company: ['Your company signature is needed', 'The client’s signature is recorded. Review the agreement and complete the company countersignature.', 'The existing client signature is preserved if this request is cancelled. A replacement requires fresh signatures.'],
+      finalizing: ['Save the final records', 'All required signatures are recorded. Generate the completed PDF and signing history to finish this file.', 'If processing fails, retry finalization. No new signatures are needed.'],
+      completed: ['Completed documents', 'The completed PDF and signing history are ready. Open or download the final records below.', 'This completed request is read-only. Its documents and signing history are retained.'],
+      cancelled: ['Prepare a replacement', 'This request is cancelled. Select Prepare replacement to correct its setup, then review and explicitly send a new request.', 'Earlier signing records are retained. A replacement starts with fresh signatures and consent.'],
+      expired: ['Prepare a replacement', 'The signing deadline has passed. Select Prepare replacement, review its setup, and explicitly send a new request.', 'Access-code replacement cannot extend a request. Earlier signing records are retained; replacement requires fresh signatures.'],
+    }[status];
+    if (!copy) return;
+    document.querySelector('#draft-stage-copy').textContent = copy[1];
+    document.querySelector('#draft-guidance-heading').textContent = copy[0];
+    document.querySelector('#demo-request-heading').textContent = copy[0];
+    document.querySelector('#draft-guidance-copy').textContent = copy[2];
+    document.body.dataset.fileStatus = status;
+    document.querySelector('#draft-setup-details').open = status === 'draft' || this.recoveryRequired || this.dirty;
+    document.querySelector('#demo-send-hint').textContent = status === 'draft' ? copy[2] : '';
+    document.querySelector('#demo-disclosure').hidden = ['completed', 'finalizing', 'cancelled', 'expired'].includes(status);
+    this.sendButton.hidden = status !== 'draft';
+    this.button.hidden = status !== 'draft';
+  }
+
+  async changeRequest(action) {
+    const button = action === 'cancel' ? this.cancelButton : this.prepareButton;
+    if (button.disabled || button.hidden || !this.requestState?.currentRequestId) return;
+    if (action === 'cancel' && !window.confirm('Cancel this request? Further signing will stop. Existing signing records, including any accepted signatures, will be retained.')) return;
+    if (action === 'prepare' && this.dirty && !window.confirm('Prepare replacement setup and discard the unsaved entries in this tab? Copy anything you need before continuing.')) return;
+    this.requestBusy = true;
+    if (action === 'cancel') this.cancellationPending = true;
+    this.updateState();
+    document.querySelector('#demo-error').hidden = true;
+    document.querySelector('#demo-status').textContent = action === 'cancel' ? 'Cancellation pending…' : 'Preparing replacement setup…';
+    try {
+      const result = await this.client.request(action === 'cancel' ? this.requestState.cancelUrl : this.requestState.replacementUrl,
+        { workspace_id: this.companyId, requestId: this.requestState.currentRequestId });
+      this.cancellationPending = false;
+      if (action === 'prepare') {
+        this.allowLeave = true;
+        this.updateState();
+        window.location.reload();
+        return;
+      }
+      this.renderRequestActions(result.file);
+      this.renderInvitation(result.invitation);
+      if (result.outcome === 'signatures_complete') {
+        document.querySelector('#demo-status').textContent = 'All required signatures were already recorded. The request was not cancelled. Continue finalization; no replacement was prepared.';
+      }
+    } catch (error) {
+      this.requestError(error);
+      document.querySelector('#demo-status').textContent = 'The request state could not be confirmed. Refresh status before continuing, or retry the same action.';
+    } finally {
+      this.requestBusy = false;
+      this.updateState();
+    }
   }
 
   clearFieldError(name) {
@@ -228,7 +418,45 @@ class ClientFileEditor {
     }
   }
 
+  renderPreparation() {
+    const fields = this.selectedTemplate()?.preparationFields || [];
+    const container = document.querySelector('#preparation-inputs');
+    container.replaceChildren();
+    this.preparationInputs.clear();
+    document.querySelector('#preparation-section').hidden = !fields.length;
+    for (const field of fields) {
+      const row = document.createElement('div');
+      row.className = 'field';
+      const label = document.createElement('label');
+      label.htmlFor = `preparation-${field.id}`;
+      label.textContent = `${field.label || field.type} · Page ${field.page} · ${field.required ? 'Required before sending' : 'Optional'}`;
+      const input = document.createElement(field.type === 'text' ? 'textarea' : 'input');
+      input.id = label.htmlFor;
+      input.dataset.preparationId = field.id;
+      if (field.type !== 'text') input.type = field.type === 'date' ? 'date' : 'text';
+      input.autocomplete = 'off';
+      input.value = this.preparationValues[field.id] || '';
+      input.setAttribute('aria-describedby', 'preparation_values-error');
+      const wrap = document.createElement('div');
+      wrap.className = 'input-wrap';
+      wrap.append(input);
+      row.append(label, wrap);
+      container.append(row);
+      this.preparationInputs.set(field.id, input);
+    }
+  }
+
   renderTemplateSetup() {
+    const prepared = this.selectedTemplate();
+    const preparationStatus = document.querySelector('#file-preparation-status');
+    preparationStatus.hidden = !prepared || this.recoveryRequired;
+    preparationStatus.textContent = prepared ? `Preparation complete · ${prepared.name} · Version ${prepared.number}` : '';
+    if (this.recoveryRequired) {
+      const item = document.createElement('li');
+      item.textContent = 'These are local draft entries. Reload issued details to review the frozen agreement setup.';
+      document.querySelector('#agreement-setup-issues').replaceChildren(item);
+      return;
+    }
     const version = this.selectedTemplate();
     document.querySelector('#company-signer-section').hidden = !version?.roles.includes('company');
     const preview = document.querySelector('#selected-template-preview');
@@ -239,12 +467,16 @@ class ClientFileEditor {
     else {
       if (!this.inputs.get('signer_name').value.trim()) issues.push("Add the client signer's name.");
       if (!this.inputs.get('signer_email').value.trim()) issues.push("Add the client signer's email.");
+      for (const field of version.preparationFields || []) {
+        if (field.required && !this.preparationInputs.get(field.id)?.value.trim()) issues.push(`Complete company preparation: ${field.label || field.type}.`);
+      }
       if (version.roles.includes('company')) {
         if (!this.inputs.get('company_signer_name').value.trim()) issues.push("Add the company countersigner's name.");
         if (!this.inputs.get('company_signer_email').value.trim()) issues.push("Add the company countersigner's email.");
       }
     }
     const list = document.querySelector('#agreement-setup-issues');
+    this.setupReady = !issues.length;
     list.replaceChildren();
     for (const message of issues.length ? issues : [this.issued ? 'Request issued. The selected version and recipients are fixed.' : 'Signer setup details are present. No request has been created.']) {
       const item = document.createElement('li');
@@ -265,6 +497,7 @@ class ClientFileEditor {
     try {
       const url = new URL(document.body.dataset.templatesUrl, location.origin);
       url.search = new URLSearchParams({ workspace_id: this.companyId, page: this.templatePage });
+      if (this.requestState?.jobId) url.searchParams.set('job_id', this.requestState.jobId);
       const result = await this.client.request(url);
       if (result.companyId !== this.companyId) throw new Error('Your workspace has changed. Sign in to this file’s workspace and retry.');
       for (const version of result.versions) this.addTemplateOption(version);
@@ -298,9 +531,11 @@ class ClientFileEditor {
     this.saveError.hidden = true;
     this.saveStatus.hidden = true;
     if (!this.validate()) return;
-    const data = Object.fromEntries([...this.inputs].map(([name, input]) => [name, input.value.trim()]));
+    const data = this.readValues();
+    for (const name of this.inputs.keys()) data[name] = data[name].trim();
     data.workspace_id = this.companyId;
     if (this.isNew) data.creation_key = this.creationKey;
+    else data.updatedAt = this.savedUpdatedAt;
     this.saving = true;
     this.updateState();
     let firstInvalid;
@@ -335,12 +570,25 @@ class ClientFileEditor {
       this.saveStatus.dataset.state = 'saved';
       this.saveStatus.hidden = false;
     } catch (error) {
+      if (error.status === 409 && error.code === 'draft_conflict') {
+        this.draftConflict = true;
+        this.conflictNotice.hidden = false;
+        return;
+      }
       if (error.status === 401 || error.status === 403 || error.code === 'workspace_changed') {
         const message = error.status === 403 ? 'Your sign-in session has changed.' : error.message;
         this.showSessionError(`${message} Your entered details are still here. Sign in to this file’s company in a new tab, then select Try again.`);
         return;
       }
       for (const [name, messages] of Object.entries(error.fieldErrors || {})) {
+        if (name === 'preparation_values') {
+          const element = document.querySelector('#preparation_values-error');
+          element.textContent = Array.isArray(messages) ? messages.join(' ') : String(messages);
+          element.hidden = false;
+          for (const input of this.preparationInputs.values()) input.setAttribute('aria-invalid', 'true');
+          firstInvalid ??= this.preparationInputs.values().next().value;
+          continue;
+        }
         if (!this.inputs.has(name)) continue;
         this.showFieldError(name, Array.isArray(messages) ? messages.join(' ') : String(messages));
         firstInvalid ??= this.inputs.get(name);
@@ -360,6 +608,8 @@ class ClientFileEditor {
     this.updateState();
     try {
       const result = await this.client.request(document.body.dataset.requestUrl);
+      this.cancellationPending = false;
+      this.renderRequestActions(result.file);
       this.renderInvitation(result.invitation);
       document.querySelector('#demo-error').hidden = true;
     } catch (error) {
@@ -371,16 +621,24 @@ class ClientFileEditor {
   }
 
   async requestInvitation(replace = false) {
-    if (this.sendButton.disabled || this.requestBusy) return;
+    if (this.checkingSession || this.saving || this.requestBusy || !this.sessionReady || this.isNew) return;
+    if (replace ? !this.canReplaceCode() : this.sendButton.disabled) return;
     this.requestBusy = true;
     this.updateState();
     document.querySelector('#demo-error').hidden = true;
     document.querySelector('#demo-status').textContent = replace ? 'Generating a replacement code…' : 'Checking setup and issuing the request…';
     const payload = { workspace_id: this.companyId };
+    if (!replace) {
+      payload.templateVersionId = this.inputs.get('template_version').value;
+      payload.updatedAt = this.savedUpdatedAt;
+      payload.replacesRequestId = this.replacesRequestId || null;
+    }
     if (replace) payload.replaceInvitationId = this.invitation.invitationId;
     try {
       const result = await this.client.request(document.body.dataset.requestUrl, payload);
-      this.renderInvitation(result.invitation);
+      if (!replace && result.created === true) this.loadedRequestId = result.file.currentRequestId;
+      this.renderRequestActions(result.file);
+      this.renderInvitation(result.invitation, { issuedHere: !replace && result.created === true });
     } catch (error) {
       this.requestError(error);
     } finally {
@@ -393,42 +651,92 @@ class ClientFileEditor {
     const element = document.querySelector('#demo-error');
     element.textContent = error.message;
     element.hidden = false;
+    if (error.fieldErrors?.preparation_values) {
+      const preparationError = document.querySelector('#preparation_values-error');
+      preparationError.textContent = error.fieldErrors.preparation_values.join(' ');
+      preparationError.hidden = false;
+      for (const input of this.preparationInputs.values()) input.setAttribute('aria-invalid', 'true');
+      this.preparationInputs.values().next().value?.focus();
+    }
     document.querySelector('#demo-status').textContent = 'Request not confirmed. Retry or refresh status to recover the existing request.';
     if ([401, 403].includes(error.status) || error.code === 'workspace_changed') this.showSessionError(error.message);
   }
 
-  renderInvitation(invitation) {
+  renderInvitation(invitation, { issuedHere = false } = {}) {
     this.invitation = invitation;
-    document.querySelector('#demo-invitation').hidden = !invitation;
+    document.querySelector('#demo-invitation').hidden = !invitation || ['cancelled', 'expired'].includes(invitation.progress);
+    const deadline = document.querySelector('#request-deadline');
+    deadline.hidden = !invitation?.requestExpiresAt;
+    deadline.textContent = invitation?.requestExpiresAt
+      ? `Signing deadline: ${this.dateFormat.format(Date.parse(invitation.requestExpiresAt))}. Access-code replacement does not extend it.` : '';
     const countersign = document.querySelector('#company-countersign');
     countersign.hidden = !invitation?.companySigningUrl;
     if (invitation?.companySigningUrl) {
       countersign.href = invitation.companySigningUrl;
-      countersign.textContent = ['finalizing', 'completed'].includes(invitation.progress) ? 'Review recorded company submission' : 'Review & countersign';
+      countersign.textContent = ['finalizing', 'completed'].includes(invitation.progress) ? 'Review recorded company submission' : 'Sign for company';
+      countersign.classList.toggle('secondary', invitation.progress !== 'awaiting_company');
     }
     if (!invitation) return;
+    this.renderStage(invitation.progress);
+    if (this.renderedRequestId !== invitation.requestId) {
+      document.querySelector('#demo-invitation').open = invitation.progress === 'awaiting_client';
+      this.renderedRequestId = invitation.requestId;
+    }
+    if (['cancelled', 'expired'].includes(invitation.progress)) {
+      this.issued = true;
+      document.querySelector('#file-status').textContent = invitation.progress === 'expired' ? 'Expired' : 'Cancelled';
+      document.querySelector('#demo-status').textContent = invitation.progress === 'expired'
+        ? 'Request expired. Prepare a replacement to collect fresh signatures.'
+        : 'Request cancelled. Prepare a replacement when you are ready to correct its setup.';
+      document.querySelector('#demo-code').value = '';
+      this.renderCompletion(null);
+      return;
+    }
+    if (this.loadedRequestId && this.loadedRequestId !== invitation.requestId && !issuedHere) this.requireIssuedReload();
+    if (!this.issued && !issuedHere) this.requireIssuedReload();
     this.issued = true;
-    document.querySelector('#file-status').textContent = ({ awaiting_company: 'Awaiting company', finalizing: 'Finalizing', completed: 'Ready to start' })[invitation.progress] || 'Awaiting client';
+    if (invitation.selectedTemplate && !this.recoveryRequired) {
+      this.addTemplateOption(invitation.selectedTemplate);
+      this.inputs.get('template_version').value = invitation.templateVersionId;
+      this.preparationValues = invitation.preparationValues || {};
+      this.renderPreparation();
+    }
+    document.querySelector('#file-status').textContent = ({ awaiting_company: 'Company signature needed', finalizing: 'Finalizing', completed: 'Completed' })[invitation.progress] || 'Awaiting client';
     this.renderCompletion(invitation.finalization);
-    document.querySelector('#demo-send-hint').textContent = 'Request issued. The selected agreement and recipients are fixed. Repeating Send recovers this same request.';
+    if (this.recoveryRequired) document.querySelector('#demo-send-hint').textContent = 'Reload issued details to review the fixed agreement setup. Your local draft entries are still here.';
     this.renderTemplateSetup();
     document.querySelector('#demo-link').value = new URL(invitation.link, location.origin).href;
+    document.querySelector('#demo-recipient').textContent = invitation.recipient
+      ? `${invitation.recipient.name} <${invitation.recipient.email}>` : '';
+    document.querySelector('#demo-subject').textContent = invitation.readOnly ? 'Your recorded agreement' : 'Please review and sign your agreement';
+    document.querySelector('#demo-message').textContent = invitation.readOnly
+      ? 'Your signature is recorded. Use the link and access code below to review your agreement. Access is read-only.'
+      : 'Please review the agreement, complete your required fields, and select Sign & submit. Open the link below and enter the access code to begin.';
     document.querySelector('#demo-open').href = invitation.link;
+    document.querySelector('#demo-open').textContent = invitation.readOnly ? 'Open client’s recorded agreement' : 'Open client signing page';
+    document.querySelector('#demo-open').classList.toggle('secondary', invitation.progress !== 'awaiting_client');
     document.querySelector('#demo-code').value = invitation.code || '';
     document.querySelector('#demo-copy-code').disabled = !invitation.code;
-    document.querySelector('#demo-replace').hidden = !invitation.canReplace;
+    document.querySelector('#demo-replace').hidden = !this.canReplaceCode();
+    document.querySelector('label[for="demo-link"]').textContent = invitation.readOnly ? 'Read-only client access link' : 'Signing link';
     this.remainingAtLoad = Date.parse(invitation.expiresAt) - Date.parse(invitation.serverNow);
+    this.requestRemainingAtLoad = invitation.requestExpiresAt
+      ? Date.parse(invitation.requestExpiresAt) - Date.parse(invitation.serverNow) : Infinity;
     this.countdownStarted = performance.now();
     const messages = {
-      pending: 'Request created · awaiting client. Opening the link still requires code verification.',
+      pending: invitation.readOnly ? 'Verify this code to restore read-only client access. It does not reopen signing.' : 'Request created · awaiting client. Opening the link still requires code verification.',
       expired: 'Code expired. Get a replacement code for this same request.',
       locked: 'Code locked after unsuccessful attempts. Get a replacement code for this same request.',
-      verified: 'Access verified. No signature has been recorded. A replacement code lets you verify again if your session has ended.',
+      verified: invitation.readOnly ? 'Code already used. Generate a replacement if the client needs to verify read-only access again.' : 'Access verified. No signature has been recorded. A replacement code lets you verify again if your session has ended.',
       replaced: 'This code was replaced. Refresh status to load the current invitation.',
-      submitted: invitation.progress === 'completed' ? 'All required signatures, the completed PDF and signing history are saved. Ready to start.' : invitation.progress === 'awaiting_company' ? 'Client submission recorded. Awaiting company countersignature; this file is not complete.' : 'Client submission recorded. Final document generation is pending; this file is not complete.',
       request_expired: 'This signing request has expired. Contact the company; a replacement code cannot extend it.',
     };
-    document.querySelector('#demo-status').textContent = messages[invitation.state];
+    const progress = {
+      awaiting_company: 'Client submission recorded. Awaiting company countersignature; the completed PDF is not yet available.',
+      finalizing: 'All required signatures recorded. Final processing is pending; the completed PDF is not yet available.',
+      completed: 'Completed PDF and signing history saved. Client access is read-only.',
+    }[invitation.progress];
+    document.querySelector('#demo-status').textContent = [progress, messages[invitation.state]].filter(Boolean).join(' ');
     this.renderCountdown();
   }
 
@@ -438,8 +746,8 @@ class ClientFileEditor {
     if (!visible) return;
     const complete = state.state === 'completed';
     document.querySelector('#completion-status').textContent = complete
-      ? `Completed PDF and signing history saved ${this.dateFormat.format(Date.parse(state.completedAt))}. Ready to start.`
-      : 'All required signatures are recorded. Final artifacts are still pending; this file is not ready to start.';
+      ? `Completed PDF and signing history saved ${this.dateFormat.format(Date.parse(state.completedAt))}.`
+      : 'All required signatures are recorded. The completed PDF and signing history are still pending.';
     document.querySelector('#completion-error').textContent = state.error || '';
     document.querySelector('#completion-error').hidden = !state.error;
     const retry = document.querySelector('#finalize-agreement');
@@ -475,21 +783,39 @@ class ClientFileEditor {
   }
 
   renderCountdown() {
-    if (!this.invitation) return;
+    if (!this.invitation || ['cancelled', 'expired'].includes(this.invitation.progress)) return;
+    if (['awaiting_client', 'awaiting_company'].includes(this.invitation.progress)
+        && this.requestRemainingAtLoad <= performance.now() - this.countdownStarted) {
+      document.querySelector('#demo-code').value = '';
+      document.querySelector('#demo-copy-code').disabled = true;
+      document.querySelector('#demo-open').removeAttribute('href');
+      document.querySelector('#demo-replace').hidden = true;
+      document.querySelector('#demo-expiry').textContent = 'Signing deadline reached. Refresh status to confirm the request outcome.';
+      const key = `${this.invitation.requestId}:${this.invitation.requestExpiresAt}`;
+      if (!this.requestBusy && this.expiryRefreshKey !== key) {
+        this.expiryRefreshKey = key;
+        void this.loadInvitation();
+      }
+      return;
+    }
     const seconds = Math.max(0, Math.ceil((this.remainingAtLoad - (performance.now() - this.countdownStarted)) / 1000));
     const expiry = document.querySelector('#demo-expiry');
-    expiry.textContent = this.invitation.state === 'submitted' ? 'Client submission recorded. Invitation verification is no longer a signing action.'
-      : this.invitation.state === 'request_expired' ? 'Request expired. Replacement codes cannot extend its deadline.'
+    expiry.textContent = this.invitation.state === 'request_expired' ? 'Request expired. Replacement codes cannot extend its deadline.'
       : this.invitation.state === 'verified' ? 'Code already used. Your verified session has its own expiry.'
       : this.invitation.state === 'locked' ? 'Code locked. Verification is unavailable with this code.'
       : seconds ? `Code expires in ${Math.floor(seconds / 3600)}h ${Math.floor(seconds / 60) % 60}m ${seconds % 60}s · ${this.dateFormat.format(Date.parse(this.invitation.expiresAt))}`
       : 'Code expired. The server requires a replacement code.';
     if (!seconds && this.invitation.state === 'pending') {
       this.invitation.state = 'expired';
+      this.invitation.canReplace = Boolean(this.invitation.accessAvailable
+        && (this.invitation.progress === 'awaiting_client' || this.invitation.readOnly));
       document.querySelector('#demo-code').value = '';
       document.querySelector('#demo-copy-code').disabled = true;
-      document.querySelector('#demo-replace').hidden = false;
-      document.querySelector('#demo-status').textContent = 'Code expired. Get a replacement code for this same request.';
+      document.querySelector('#demo-replace').hidden = !this.canReplaceCode();
+      document.querySelector('#demo-status').textContent = this.invitation.readOnly
+        ? 'Read-only access code expired. Get a replacement code for this same agreement; the recorded signature is preserved.'
+        : 'Code expired. Get a replacement code for this same request.';
+      this.updateState();
     }
   }
 

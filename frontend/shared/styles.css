@@ -60,3 +60,13 @@ input:-webkit-autofill { -webkit-text-fill-color: var(--ink); box-shadow: 0 0 0 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
 }
+.company-workflow { margin: 0 0 24px; }
+.company-workflow ol { display: flex; flex-wrap: wrap; gap: 12px 28px; padding: 16px 0; margin: 0; list-style: none; border-block: 1px solid var(--line); }
+.company-workflow li { display: flex; align-items: center; gap: 8px; min-height: 32px; color: var(--muted); font-size: 13px; }
+.company-workflow li > span { font-variant-numeric: tabular-nums; }
+.company-workflow [aria-current="step"] { color: var(--ink); font-weight: 700; }
+.company-workflow [aria-current="step"] > span { color: var(--blue); }
+.company-workflow a { color: inherit; text-underline-offset: 4px; }
+.company-workflow a:hover { color: var(--blue); }
+.company-workflow a:focus-visible { outline: 2px solid var(--blue); outline-offset: 4px; }
+@media (max-width: 600px) { .company-workflow ol { gap: 6px 18px; } .company-workflow li { font-size: 12px; } }

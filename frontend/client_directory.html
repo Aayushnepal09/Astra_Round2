@@ -1,0 +1,32 @@
+<section class="panel client-directory" id="client-directory" aria-labelledby="clients-title">
+  <h2 id="clients-title" class="sr-only">Clients and their jobs</h2>
+  <details id="new-client-details" class="new-client-details"><summary>Add a client</summary>
+    <form id="new-client-form" class="client-setup-form">
+      <fieldset><legend class="sr-only">Client contact details</legend>
+        <label>Client name (required)<input name="name" maxlength="200" required autocomplete="organization"></label>
+        <label>Contact email<input name="email" type="email" maxlength="254" autocomplete="email"></label>
+        <details><summary>Default signer (optional)</summary><p class="field-hint">Leave blank to use the client name and contact email. Confirm the signer separately for each agreement.</p>
+          <label>Signer name<input name="signer_name" maxlength="200" autocomplete="off"></label>
+          <label>Signer email<input name="signer_email" type="email" maxlength="254" autocomplete="off"></label>
+        </details>
+        <button class="button" type="submit">Save client</button>
+      </fieldset><p class="field-hint" role="status" aria-live="polite"></p><p class="field-error" role="alert" hidden></p>
+    </form>
+  </details>
+  <div class="client-search"><label for="client-search">Find a client or job</label><input id="client-search" type="search" maxlength="200" placeholder="Client name, email or job reference" autocomplete="off"></div>
+  <p id="client-directory-status" class="field-hint" role="status" aria-live="polite">Open Clients to load your directory.</p><button id="clients-retry" class="button secondary" type="button" hidden>Retry loading clients</button>
+  <div id="client-list" class="client-list"></div>
+  <nav id="clients-pagination" class="client-pagination" aria-label="Client pages" hidden><button id="clients-previous" class="button secondary" type="button">Previous clients</button><span id="clients-page"></span><button id="clients-next" class="button secondary" type="button">Next clients</button></nav>
+</section>
+<dialog id="request-confirm-dialog" class="workflow-dialog" aria-labelledby="request-confirm-title">
+  <form method="dialog"><h2 id="request-confirm-title"></h2><p id="request-confirm-copy"></p><div class="dialog-actions"><button class="button secondary" value="cancel">Go back</button><button class="button" id="request-confirm-action" value="confirm"></button></div></form>
+</dialog>
+<dialog id="agreement-share-dialog" class="workflow-dialog" aria-labelledby="agreement-share-title">
+  <form method="dialog" class="dialog-heading"><h2 id="agreement-share-title">Share signing access</h2><button class="button secondary" value="close" aria-label="Close signing access">Close</button></form>
+  <p class="delivery-note">Demo delivery · No email is sent. Share this link and code with the test signer.</p>
+  <p id="share-recipient"></p><label for="share-link">Client access link</label><input id="share-link" readonly>
+  <div class="dialog-actions"><a class="button" id="share-open-client" target="_blank" rel="noopener noreferrer">Open client view</a><button type="button" class="button secondary" id="share-copy-link">Copy link</button></div>
+  <label for="share-code">Access code</label><input id="share-code" readonly autocomplete="off">
+  <div class="dialog-actions"><button type="button" class="button secondary" id="share-copy-code">Copy code</button><button type="button" class="button secondary" id="share-replace-code" hidden>Get new code</button><button type="button" class="button secondary" id="share-refresh">Refresh access</button></div>
+  <p id="share-expiry" class="field-hint"></p><p id="share-feedback" class="field-hint" role="status" aria-live="polite"></p>
+</dialog>

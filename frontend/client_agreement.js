@@ -1,86 +1,77 @@
 import { SessionClient } from './shared/ui.js';
+import { DocumentAssistant } from './agreement_assistant.js';
+import { ScrollDocument } from './shared/scroll_document.js';
 
 class AgreementReview {
   constructor() {
     this.data = JSON.parse(document.querySelector('#review-data').textContent);
     this.client = new SessionClient();
     this.page = 1;
-    this.image = document.querySelector('#review-image');
     this.status = document.querySelector('#review-status');
     this.error = document.querySelector('#review-error');
-    this.previous = document.querySelector('#review-previous');
-    this.next = document.querySelector('#review-next');
-    this.previous.addEventListener('click', () => this.load(this.page - 1));
-    this.next.addEventListener('click', () => this.load(this.page + 1));
-    document.querySelector('#review-retry').addEventListener('click', () => this.load(this.page));
-    document.querySelector('#review-zoom').addEventListener('change', event => { document.querySelector('#review-sheet').style.width = `${event.target.value}%`; });
+    document.querySelector('#review-page-number').addEventListener('change', event => this.load(Number(event.target.value)));
+    document.querySelector('#review-retry').addEventListener('click', () => this.refresh());
+    document.querySelector('#review-zoom').addEventListener('change', event => {
+      document.querySelector('#review-viewport').style.setProperty('--document-zoom', `${event.target.value}%`);
+    });
     document.querySelector('#review-logout').addEventListener('click', () => this.logout());
-    window.addEventListener('pageshow', event => { if (event.persisted) this.load(this.page); });
+    this.signing = new SigningController(this, this.data.signing);
+    this.assistant = new DocumentAssistant(this);
+    window.addEventListener('pageshow', event => { if (event.persisted) this.signing.check(); });
+    window.addEventListener('pagehide', () => this.clearImage());
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) this.clearImage();
-      else this.load(this.page);
+      else this.signing.check();
     });
-    this.signing = new SigningController(this, this.data.signing);
-    this.load(this.page);
+    this.startViewer();
+  }
+
+  startViewer() {
+    if (this.viewer || document.hidden || this.signing.expired) return;
+    this.viewer = new ScrollDocument({ root: document.querySelector('#review-viewport'),
+      count: this.data.pageCount, geometry: this.data.pageGeometry, url: number => this.data.pages[number - 1],
+      onPage: number => this.setPage(number),
+      onLoad: () => { this.signing.renderMarkers(); this.status.textContent = this.signing.state.receipt
+        ? 'Recorded agreement. Your accepted fields are read-only.' : 'Scroll to review every page. Tap a numbered field to complete it.'; },
+      onError: (error, number) => {
+        if ([401, 403, 410].includes(error.status)) this.signing.accessExpired();
+        this.error.hidden = false;
+        document.querySelector('#review-error-copy').textContent = `Page ${number}: ${error.message}`;
+      },
+    });
+    this.setPage(this.page);
+    this.signing.renderMarkers();
+  }
+
+  setPage(page) {
+    this.page = page;
+    document.querySelector('#review-page-number').value = page;
+    document.querySelector('#review-page-label').textContent = `of ${this.data.pageCount}`;
   }
 
   clearImage() {
-    this.cancelImageLoad?.();
-    this.cancelImageLoad = null;
-    this.image.hidden = true;
-    document.querySelector('#review-field-markers').replaceChildren();
-    this.image.removeAttribute('src');
-    if (this.imageUrl) URL.revokeObjectURL(this.imageUrl);
-    this.imageUrl = null;
+    this.viewer?.destroy(); this.viewer = null;
   }
 
-  async load(page) {
-    if (page < 1 || page > this.data.pageCount) return;
-    if (this.loading) { this.queuedPage = page; return; }
-    this.loading = true;
-    this.page = page;
-    this.clearImage();
+  load(page) {
+    if (!Number.isInteger(page) || page < 1 || page > this.data.pageCount || this.signing.expired) return;
+    this.startViewer();
+    this.setPage(page);
+    this.viewer?.goTo(page);
+  }
+
+  reveal(field) {
+    if (this.signing.expired) return;
+    this.startViewer();
+    this.setPage(field.page);
+    this.viewer?.revealField(field);
+  }
+
+  refresh() {
+    this.startViewer();
     this.error.hidden = true;
-    this.previous.disabled = this.next.disabled = true;
-    document.querySelector('#review-page-label').textContent = `Page ${page} of ${this.data.pageCount}`;
-    this.status.textContent = 'Loading agreement page…';
-    document.querySelector('#review-viewport').setAttribute('aria-busy', 'true');
-    try {
-      const response = await fetch(this.data.pages[page - 1], { credentials: 'same-origin', cache: 'no-store' });
-      if (!response.ok) {
-        const result = await response.json();
-        if ([401, 410].includes(response.status)) this.signing.accessExpired();
-        throw new Error(result.error || 'Couldn’t load this page. Retry.');
-      }
-      const blob = await response.blob();
-      if (blob.type !== 'image/png') throw new Error('Couldn’t load this page. Verify access again.');
-      if (document.hidden) return;
-      this.imageUrl = URL.createObjectURL(blob);
-      await new Promise((resolve, reject) => {
-        this.cancelImageLoad = resolve;
-        this.image.onload = () => { this.cancelImageLoad = null; resolve(); };
-        this.image.onerror = () => reject(new Error('Couldn’t display this page. Retry.'));
-        this.image.src = this.imageUrl;
-      });
-      if (document.hidden || !this.imageUrl) { this.clearImage(); return; }
-      this.image.alt = `Agreement page ${page} of ${this.data.pageCount}`;
-      this.image.hidden = false;
-      this.status.textContent = 'Complete your fields, then use Sign & submit when ready.';
-      this.signing.renderMarkers();
-    } catch (error) {
-      this.clearImage();
-      this.status.textContent = 'Agreement page unavailable.';
-      document.querySelector('#review-error-copy').textContent = error.message;
-      this.error.hidden = false;
-    } finally {
-      this.loading = false;
-      this.previous.disabled = page === 1;
-      this.next.disabled = page === this.data.pageCount;
-      document.querySelector('#review-viewport').setAttribute('aria-busy', 'false');
-      const queuedPage = this.queuedPage;
-      this.queuedPage = null;
-      if (queuedPage && !document.hidden) this.load(queuedPage);
-    }
+    this.viewer?.reload();
+    this.signing.renderMarkers();
   }
 
   async logout() {
@@ -89,7 +80,7 @@ class AgreementReview {
       this.clearImage();
       location.replace(document.body.dataset.invitationUrl);
     } catch (error) {
-      this.clearImage();
+      this.clearImage(); this.signing.accessExpired();
       this.error.hidden = false;
       document.querySelector('#review-error-copy').textContent = error.message;
     }
@@ -102,6 +93,7 @@ class SigningController {
     this.state = state;
     this.client = review.client;
     this.inputs = new Map();
+    this.markers = new Map();
     this.form = document.querySelector('#signing-form');
     this.fields = document.querySelector('#signing-fields');
     this.consent = document.querySelector('#signing-consent');
@@ -113,11 +105,13 @@ class SigningController {
     document.querySelector('#signing-consent-copy').textContent = state.consentText;
     this.renderFields();
     this.setValues(state.values);
+    this.activeFieldId = state.fields[0]?.id || null;
     this.savedValues = JSON.stringify(this.values());
     this.form.addEventListener('input', event => {
       this.clearErrors();
       this.consent.removeAttribute('aria-invalid');
       if (event.target !== this.consent) this.consent.checked = false;
+      if (this.state.fields.some(field => field.type === 'signature' && this.inputs.get(field.id) === event.target)) this.adoptedSignature = null;
       this.update();
     });
     this.form.addEventListener('keydown', event => {
@@ -130,6 +124,14 @@ class SigningController {
     this.save.addEventListener('click', () => this.send('save'));
     document.querySelector('#signing-check').addEventListener('click', () => this.check());
     document.querySelector('#signing-restore').addEventListener('click', () => this.check(true));
+    document.querySelector('#signing-field-select').addEventListener('change', event => this.activateField(event.target.value, { navigate: true, edit: true }));
+    document.querySelector('#signing-next-field').addEventListener('click', () => this.nextIncomplete());
+    document.querySelector('#review-next-required').addEventListener('click', () => this.nextIncomplete());
+    document.querySelector('#signing-autofill').addEventListener('click', () => this.autofill());
+    document.querySelector('#signature-adoption').addEventListener('submit', event => this.adoptSignature(event));
+    document.querySelector('#signature-cancel').addEventListener('click', () => document.querySelector('#signature-dialog').close());
+    document.querySelector('#signing-editor-close').addEventListener('click', () => this.closeFieldEditor());
+    window.matchMedia?.('(max-width: 850px)').addEventListener?.('change', event => { if (!event.matches) this.closeFieldEditor(); });
     if (state.receipt) this.confirm(state);
     this.update();
   }
@@ -140,6 +142,8 @@ class SigningController {
     this.state.fields.forEach((field, index) => {
       const row = document.createElement('div');
       row.className = 'field';
+      row.hidden = index !== 0;
+      document.querySelector('#signing-field-select').add(new Option(`${index + 1}. ${field.label || labels[field.type]} · Page ${field.page}`, field.id));
       const label = document.createElement('label');
       label.htmlFor = `signer-${field.id}`;
       label.textContent = `${index + 1}. ${field.label || labels[field.type]}${field.required ? ' · Required' : ' · Optional'}`;
@@ -169,7 +173,6 @@ class SigningController {
       page.textContent = `View page ${field.page}`;
       page.addEventListener('click', () => {
         this.review.load(field.page);
-        document.querySelector('#review-viewport').scrollIntoView({ block: 'nearest' });
       });
       reference.append(type, page);
       const error = document.createElement('p');
@@ -183,17 +186,137 @@ class SigningController {
     });
   }
 
+  editable() {
+    return !this.busy && !this.expired && !this.uncertain && !this.state.receipt;
+  }
+
   renderMarkers() {
-    const container = document.querySelector('#review-field-markers');
-    container.replaceChildren();
+    if (!this.review.viewer) return;
+    this.review.viewer.pages.forEach(page => { page.fields.hidden = page.image.hidden; });
+    if (this.state.completion?.pdfUrl) {
+      this.review.viewer.pages.forEach(page => page.fields.replaceChildren()); this.markers.clear(); return;
+    }
+    const values = this.values();
     this.state.fields.forEach((field, index) => {
-      if (field.page !== this.review.page) return;
-      const marker = document.createElement('span');
-      marker.className = 'review-field-marker';
+      const container = this.review.viewer.pages.get(field.page)?.fields;
+      if (!container) return;
+      let marker = this.markers.get(field.id);
+      if (!marker) {
+        marker = document.createElement('button');
+        marker.type = 'button'; marker.className = 'review-field-marker';
+        marker.dataset.fieldId = field.id;
+        marker.addEventListener('click', () => this.activateField(field.id, { place: true }));
+        this.markers.set(field.id, marker);
+      }
+      const value = values[field.id];
+      const completed = field.type === 'acknowledgement' ? value === true : !!value?.trim();
+      marker.dataset.complete = String(completed);
+      marker.dataset.highlight = String(field.id === this.activeFieldId);
       Object.assign(marker.style, { left: `${field.x * 100}%`, top: `${field.y * 100}%`, width: `${field.width * 100}%`, height: `${field.height * 100}%` });
-      marker.textContent = String(index + 1);
-      container.append(marker);
+      marker.textContent = `${index + 1}. ${completed ? field.type === 'acknowledgement' ? 'Acknowledged' : value : field.type === 'signature' ? 'Tap to sign' : field.label || field.type}`;
+      marker.setAttribute('aria-label', `${index + 1}. ${field.label || field.type}, ${completed ? 'completed' : field.required ? 'required' : 'optional'}`);
+      marker.disabled = !this.editable();
+      if (marker.parentElement !== container) container.append(marker);
     });
+  }
+
+  activateField(id, { place = false, navigate = false, edit = false } = {}) {
+    const field = this.state.fields.find(item => item.id === id);
+    if (!field) return;
+    this.activeFieldId = id;
+    this.navigationStarted = true;
+    for (const [key, input] of this.inputs) input.closest('.field').hidden = key !== id;
+    document.querySelector('#signing-field-select').value = id;
+    this.renderMarkers();
+    if (!this.editable()) { if (navigate) this.revealField(field); return; }
+    const input = this.inputs.get(id);
+    const mobile = window.matchMedia?.('(max-width: 850px)').matches;
+    if (mobile && navigate && !place && !edit) this.closeFieldEditor();
+    if (place && field.type === 'signature') {
+      if (this.adoptedSignature) {
+        input.value = this.adoptedSignature;
+        this.changed();
+      } else {
+        this.signatureFieldId = id;
+        document.querySelector('#signature-name').value = input.value || this.state.signer?.name || '';
+        document.querySelector('#signature-error').hidden = true;
+        document.querySelector('#signature-dialog').showModal();
+      }
+    } else if (place && field.type === 'acknowledgement') {
+      input.checked = !input.checked;
+      this.changed();
+    } else if (place || edit || (navigate && !mobile)) {
+      if (mobile) {
+        const slot = document.querySelector('#signing-form-slot');
+        if (!this.form.classList.contains('is-editing')) slot.style.minHeight = `${this.form.getBoundingClientRect().height}px`;
+        this.form.classList.add('is-editing');
+        document.querySelector('#signing-editor-close').hidden = false;
+      }
+      input.focus({ preventScroll: true });
+      if (!mobile) input.scrollIntoView({ block: 'nearest' });
+    }
+    if (navigate || place) this.revealField(field);
+  }
+
+  revealField(field) {
+    if (this.review.reveal) this.review.reveal(field);
+    else this.review.load(field.page);
+  }
+
+  closeFieldEditor() {
+    this.form.classList.remove('is-editing');
+    document.querySelector('#signing-form-slot').style.minHeight = '';
+    document.querySelector('#signing-editor-close').hidden = true;
+  }
+
+  changed() {
+    this.clearErrors(); this.consent.checked = false;
+    this.status.textContent = '';
+    this.update();
+  }
+
+  adoptSignature(event) {
+    event.preventDefault();
+    if (!this.editable()) { document.querySelector('#signature-dialog').close(); return; }
+    const name = document.querySelector('#signature-name').value.trim();
+    const normalize = value => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+    if (!name || normalize(name) !== normalize(this.state.signer?.name || '')) {
+      const error = document.querySelector('#signature-error');
+      error.textContent = `Enter your assigned signer name: ${this.state.signer?.name || ''}.`;
+      error.hidden = false; return;
+    }
+    this.adoptedSignature = name;
+    this.inputs.get(this.signatureFieldId).value = name;
+    document.querySelector('#signature-dialog').close();
+    this.changed();
+  }
+
+  autofill() {
+    if (!this.editable()) return;
+    let count = 0;
+    for (const field of this.state.fields) {
+      const input = this.inputs.get(field.id);
+      if (input.value.trim() || field.type === 'acknowledgement') continue;
+      const label = (field.label || '').trim().replace(/[:*]+$/, '').trim();
+      let value = '';
+      if (field.type === 'name' && /^(?:(?:your|client|signer|full|printed|company signer|company countersigner)\s+)?name$/i.test(label)) value = this.state.signer?.name || '';
+      if (field.type === 'text' && /^(?:(?:your|client|signer|company signer)\s+)?e-?mail(?: address)?$/i.test(label)) value = this.state.signer?.email || '';
+      if (value) { input.value = value; count++; }
+    }
+    this.changed();
+    this.status.textContent = count ? `Filled ${count} empty name or email fields. Review the values before saving. Signatures and consent still need your action.`
+      : 'No empty name or email fields could be matched. Existing entries are unchanged.';
+  }
+
+  nextIncomplete() {
+    if (!this.editable()) return;
+    const values = this.values();
+    const fields = this.state.fields;
+    const start = this.navigationStarted ? fields.findIndex(field => field.id === this.activeFieldId) + 1 : 0;
+    const ordered = [...fields.slice(start), ...fields.slice(0, start)];
+    const field = ordered.find(field => field.required && (field.type === 'acknowledgement' ? values[field.id] !== true : !values[field.id]?.trim()));
+    if (field) this.activateField(field.id, { navigate: true });
+    else { this.status.textContent = 'Required fields are filled. Review your entries and confirm your intent before Sign & submit.'; this.consent.focus(); }
   }
 
   values() {
@@ -201,6 +324,7 @@ class SigningController {
   }
 
   setValues(values) {
+    this.adoptedSignature = null;
     for (const [id, input] of this.inputs) {
       if (input.type === 'checkbox') input.checked = values[id] === true;
       else input.value = values[id] || '';
@@ -208,15 +332,55 @@ class SigningController {
   }
 
   update() {
+    const instructions = document.querySelector('#signing-field-instructions');
+    if (instructions) instructions.hidden = !!this.state.receipt;
+    const fieldsLink = document.querySelector('#signing-fields-link');
+    if (fieldsLink) fieldsLink.textContent = this.state.receipt ? 'View recorded fields' : 'Complete required fields';
     const locked = this.busy || this.expired || this.uncertain || !!this.state.receipt;
     this.fields.disabled = !!locked;
     this.consent.disabled = !!locked;
     this.save.disabled = this.submit.disabled = !!locked;
+    this.save.parentElement.hidden = !!this.state.receipt;
+    this.consent.closest('.signing-consent').hidden = !!this.state.receipt;
+    document.querySelector('#signing-restore').hidden = !!this.state.receipt;
+    document.querySelector('#signing-help').hidden = !!this.state.receipt;
     document.querySelector('#signing-check').disabled = !!this.busy;
     document.querySelector('#signing-restore').disabled = !!this.busy || !!this.uncertain || !!this.state.receipt;
+    if (this.expired || this.uncertain) document.querySelector('#signing-recovery').open = true;
     this.form.setAttribute('aria-busy', String(!!this.busy));
+    document.querySelector('#signing-autofill').disabled = !!locked;
+    document.querySelector('#signing-autofill').hidden = !!this.state.receipt;
+    document.querySelector('#signing-next-field').disabled = !!locked;
+    document.querySelector('#review-next-required').disabled = !!locked;
+    document.querySelector('#review-next-required').hidden = !!this.state.receipt;
+    document.querySelector('#signing-field-select').disabled = !!this.busy || !!this.expired || !!this.uncertain;
+    const values = this.values();
+    const required = this.state.fields.filter(field => field.required);
+    const complete = required.filter(field => field.type === 'acknowledgement' ? values[field.id] === true : !!values[field.id]?.trim()).length;
+    const ready = complete === required.length;
+    const recorded = !!this.state.receipt;
+    this.submit.classList.toggle('secondary', !ready);
+    for (const id of ['signing-next-field', 'review-next-required']) {
+      const next = document.querySelector(`#${id}`);
+      next.textContent = ready ? 'Review & sign' : 'Next required field';
+      next.classList.toggle('secondary', ready);
+      next.hidden = recorded;
+    }
+    document.querySelector('#signing-next-step').textContent = recorded ? 'Your recorded fields are read-only.'
+      : this.expired || this.uncertain ? 'Check your access or submission status below before continuing.'
+      : ready ? 'Review your entries, confirm your consent, then select Sign & submit.'
+      : `${required.length - complete} required ${required.length - complete === 1 ? 'field remains' : 'fields remain'}. Next takes you to an unfinished field.`;
+    document.querySelector('#signing-required-progress').textContent = `${complete} of ${required.length} required fields filled`;
+    document.querySelector('#review-required-progress').textContent = `${complete} of ${required.length} required fields filled`;
+    this.renderMarkers();
     const dirty = !this.state.receipt && (JSON.stringify(this.values()) !== this.savedValues || this.uncertain);
+    const saveState = document.querySelector('#signing-save-state');
+    saveState.textContent = recorded ? 'Submission recorded.' : this.busy ? 'Checking or saving…'
+      : this.uncertain ? 'Submission not confirmed. Check status before retrying.'
+      : dirty ? 'Unsaved changes. Save progress before leaving.' : 'No unsaved changes.';
+    saveState.dataset.dirty = String(!!dirty);
     window[dirty ? 'addEventListener' : 'removeEventListener']('beforeunload', this.beforeUnload);
+    this.review.assistant?.update();
   }
 
   clearErrors() {
@@ -232,11 +396,14 @@ class SigningController {
     this.expired = true;
     this.consent.checked = false;
     this.review.clearImage();
-    document.querySelector('#review-field-markers').replaceChildren();
+    this.closeFieldEditor();
+    this.clearCompletedAccess();
     document.querySelector('#signing-reverify').hidden = false;
     this.status.textContent = this.state.role === 'company'
       ? 'Company access is unavailable. Your entries remain in this tab. Sign in to this workspace in a new tab, then check submission status here.'
-      : 'Access expired. Your entries remain in this tab. Verify access in a new tab, then check submission status here.';
+      : this.state.receipt
+      ? 'Access expired. Ask the company for a replacement link and code from its demo panel. Verify the replacement link in a new tab, then check status here. Your recorded signature is preserved.'
+      : 'Access expired. Your entries remain in this tab. Ask the company for a replacement link and code, verify in a new tab, then check status here.';
     this.update();
   }
 
@@ -254,6 +421,7 @@ class SigningController {
       first ??= input;
     }
     if ([401, 403, 410].includes(error.status)) this.accessExpired();
+    if (first && first !== this.consent) this.activateField(first.name);
     first?.focus();
   }
 
@@ -274,7 +442,10 @@ class SigningController {
       const result = await this.client.request(document.body.dataset.signingUrl, payload);
       this.state = result.signing;
       this.savedValues = JSON.stringify(this.values());
-      if (this.state.receipt) this.confirm(this.state);
+      if (this.state.receipt) {
+        this.confirm(this.state);
+        this.review.refresh();
+      }
       else this.status.textContent = 'Progress saved. No signature has been recorded.';
     } catch (error) {
       if (action === 'submit' && (!error.status || error.status >= 500 || error.code === 'already_submitted')) {
@@ -310,18 +481,25 @@ class SigningController {
         this.uncertain = false;
         this.status.textContent = restore ? 'Saved progress loaded. Confirm consent before signing.' : 'No submission recorded. Your entries remain here; you can continue or retry Sign & submit.';
       }
+      this.review.refresh();
+      this.review.assistant?.check();
     } catch (error) { this.showError(error); }
     finally { this.busy = false; this.update(); }
   }
 
   confirm(state) {
+    this.closeFieldEditor();
     this.state = state;
     this.uncertain = false;
     this.setValues(state.values);
     this.consent.checked = true;
     document.querySelector('#signing-confirmation').hidden = false;
     document.querySelector('#confirmation-copy').textContent = state.progress === 'completed'
-      ? 'All required signatures, the completed PDF and signing history are saved. The company can access the final artifacts from the client file.'
+      ? state.role === 'company'
+        ? 'All required signatures, the completed PDF and signing history are saved. The company can access the final artifacts from the client file.'
+        : state.completion?.pdfUrl
+        ? 'All required signatures and final processing are complete. You can view or download your completed agreement below.'
+        : 'Completion is recorded, but the completed PDF is unavailable. Contact the company; your signature is preserved.'
       : state.role === 'company'
       ? 'Your company countersignature is recorded. All required signatures are recorded; final-document generation is pending. This file is not complete.'
       : state.progress === 'awaiting_company'
@@ -331,9 +509,35 @@ class SigningController {
     document.querySelector('#confirmation-reference').textContent = `Submission reference: ${state.receipt.id}`;
     document.querySelector('#signing-progress').textContent = state.progress === 'completed' ? 'Completed' : state.progress === 'awaiting_company' ? 'Awaiting company' : 'Finalizing';
     document.querySelector('#signing-notice').textContent = 'Your accepted values are now read-only. You can continue reviewing the agreement while your access remains authorized.';
-    this.status.textContent = state.progress === 'completed' ? 'Submission accepted. Final artifacts saved.' : 'Submission accepted by the server. Final artifacts are pending; the company can retry finalization from the client file.';
+    if (state.role === 'company') {
+      const notice = document.querySelector('.client-signed-preview');
+      if (notice) notice.dataset.complete = String(state.progress === 'completed');
+      const title = document.querySelector('#client-signature-status-title');
+      const explanation = document.querySelector('#company-preview-status');
+      if (title) title.textContent = 'Client signature recorded';
+      if (explanation) explanation.textContent = state.progress === 'completed'
+        ? 'All required signatures are received. The completed document is available from the client file.'
+        : 'All required signatures are recorded. Final document processing is pending.';
+    }
+    this.status.textContent = state.progress === 'completed' ? 'Submission accepted. Final processing complete.'
+      : state.progress === 'awaiting_company' ? 'Awaiting company countersignature. Check submission status for updates.'
+      : 'All required signatures are recorded. Final processing is pending. Check submission status for updates; the company can retry processing.';
+    this.clearCompletedAccess();
+    const completionError = document.querySelector('#client-completion-error');
+    completionError.textContent = state.completion?.error || '';
+    completionError.hidden = !completionError.textContent;
+    if (!this.expired && state.completion?.pdfUrl) {
+      document.querySelector('#client-completed-view').href = state.completion.pdfUrl;
+      document.querySelector('#client-completed-download').href = `${state.completion.pdfUrl}?download=1`;
+      document.querySelector('#client-completed-downloads').hidden = false;
+    }
     this.update();
     document.querySelector('#signing-confirmation').focus();
+  }
+
+  clearCompletedAccess() {
+    document.querySelector('#client-completed-downloads').hidden = true;
+    for (const id of ['client-completed-view', 'client-completed-download']) document.getElementById(id).removeAttribute('href');
   }
 }
 

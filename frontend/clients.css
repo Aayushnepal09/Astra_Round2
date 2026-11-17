@@ -1,0 +1,47 @@
+.client-directory { padding-bottom: 24px; }
+.client-directory .section-heading > .button { flex-shrink: 0; white-space: nowrap; }
+.client-search, #client-directory-status, #clients-retry, .new-client-details, .client-list, .client-pagination { margin-inline: 28px; }
+.client-search { margin-block: 24px 12px; max-width: 540px; }
+.client-search label, .client-setup-form label:not(.version-choice) { display: block; font-size: 13px; font-weight: 700; line-height: 1.6; }
+.client-search input, .client-setup-form input:not([type="checkbox"]), #agreement-upload-scope { display: block; width: 100%; min-width: 0; min-height: 44px; padding: 11px 12px; margin: 8px 0 18px; border: 1px solid #bed0e8; border-radius: 6px; color: var(--ink); background: var(--surface); font: inherit; font-size: 14px; }
+.client-search input:focus-visible, .client-setup-form input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.client-list { margin-top: 20px; }
+.client-row { border-top: 1px solid var(--line); }
+.client-row > summary { display: list-item; position: relative; padding: 20px 12px 20px 4px; font-size: 14px; cursor: pointer; }
+.client-identity { display: inline-flex; flex-direction: column; gap: 5px; vertical-align: middle; max-width: 100%; overflow-wrap: anywhere; }
+.client-identity strong { color: var(--ink); font-size: 16px; }
+.client-identity > span, .client-counts { color: var(--muted); font-size: 12px; line-height: 1.7; }
+.client-counts { display: block; padding-left: 16px; margin-top: 8px; }
+.client-content { margin: 0 0 24px 16px; padding-left: 20px; border-left: 1px solid var(--line); }
+.client-content > .field-hint { margin-block: 16px; }
+.client-job { margin-top: 12px; border-top: 1px solid var(--line); }
+.client-job > summary { min-height: 44px; padding: 16px 0; color: var(--ink); font-size: 14px; font-weight: 700; cursor: pointer; overflow-wrap: anywhere; }
+.job-agreements { padding: 0; margin: 0 0 16px; list-style: none; }
+.job-agreements li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.job-agreements .file-name { font-size: 14px; overflow-wrap: anywhere; }
+.job-agreements .status-badge { flex-shrink: 0; }
+.job-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-block: 16px; }
+.client-setup-form { max-width: 680px; padding-block: 16px; }
+.client-setup-form fieldset { min-width: 0; padding: 0; margin: 0; border: 0; }
+.client-setup-form fieldset > .button { margin-top: 18px; }
+.client-setup-form summary, .new-client-details > summary, .client-create-job > summary, .job-add-agreements > summary { min-height: 44px; padding-block: 12px; color: var(--ink); font-size: 13px; font-weight: 700; cursor: pointer; }
+.version-picker { margin-top: 8px; }
+.version-choice { display: flex; align-items: flex-start; gap: 10px; padding: 14px 0; border-bottom: 1px solid var(--line); color: var(--ink); font-size: 13px; line-height: 1.7; }
+.version-choice input { flex-shrink: 0; width: 20px; height: 20px; accent-color: var(--blue); }
+.version-choice span { flex: 1; overflow-wrap: anywhere; }
+.version-choice a { min-height: 28px; font-size: 12px; }
+.client-pagination { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 20px; font-size: 13px; }
+.agreement-index { margin-top: 28px; }
+.agreement-index > summary { min-height: 44px; padding: 16px 0; color: var(--muted); font-size: 14px; font-weight: 700; cursor: pointer; }
+.job-upload-context { padding: 18px 28px; margin: 0; background: var(--blue-soft); }
+.job-upload-context p { font-size: 13px; line-height: 1.7; margin: 0 0 12px; }
+.job-upload-context label { display: block; max-width: 480px; font-size: 13px; font-weight: 700; }
+.client-directory :focus-visible { outline-offset: 3px; }
+@media (max-width: 600px) {
+  .client-search, #client-directory-status, #clients-retry, .new-client-details, .client-list, .client-pagination { margin-inline: 18px; }
+  .client-content { margin-left: 4px; padding-left: 14px; }
+  .job-agreements li { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .client-setup-form input:not([type="checkbox"]) { font-size: 16px; }
+  .client-pagination { flex-wrap: wrap; }
+  .job-upload-context { padding: 18px; }
+}

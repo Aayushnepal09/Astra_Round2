@@ -71,7 +71,16 @@
 .demo-request .field { margin-top: 18px; }
 .demo-request input { width: 100%; min-width: 0; padding: 12px; }
 .demo-request .field-hint { overflow-wrap: anywhere; }
+#preparation-inputs .field { margin-top: 20px; }
+#preparation-inputs label { overflow-wrap: anywhere; }
+#preparation-inputs input, #preparation-inputs textarea { width: 100%; min-width: 0; padding: 12px; color: var(--ink); font: inherit; font-size: 16px; }
+#preparation-inputs textarea { min-height: 90px; border: 0; background: transparent; resize: vertical; }
+#preparation-inputs input:disabled, #preparation-inputs textarea:disabled { opacity: 1; color: var(--ink); }
 #demo-code, #demo-expiry { font-variant-numeric: tabular-nums; }
+#demo-invitation > summary { min-height: 44px; padding-block: 14px; color: var(--ink); font-size: 13px; font-weight: 700; cursor: pointer; }
+#draft-setup-details > summary { min-height: 44px; padding: 16px 24px; color: var(--ink); font-size: 13px; font-weight: 700; cursor: pointer; }
+.draft-editor:not([data-file-status="draft"]) .draft-form { display: flex; flex-direction: column; }
+.draft-editor:not([data-file-status="draft"]) .demo-request { order: -1; }
 .draft-field-grid input:disabled { cursor: default; }
 
 @media (max-width: 950px) {
@@ -112,3 +121,9 @@
   .draft-save-row > .button { width: 100%; }
   .draft-alert { flex-direction: column; align-items: flex-start; gap: 14px; }
 }
+.invitation-preview { margin: 1rem 0; }
+.invitation-preview dt { font-size: .8rem; color: var(--text-secondary, #666); }
+.invitation-preview dd { margin: .25rem 0 .75rem; overflow-wrap: anywhere; }
+.request-options { margin-top: 24px; padding-top: 8px; border-top: 1px solid var(--line); }
+.request-options > summary { min-height: 44px; padding-block: 12px; font-size: 13px; font-weight: 700; color: var(--ink); cursor: pointer; }
+.draft-editor :is(input, select, textarea, summary, #demo-request-heading) { scroll-margin-top: 24px; }

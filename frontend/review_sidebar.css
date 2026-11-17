@@ -1,0 +1,28 @@
+/* Navigation only: retain the current signing controls and document behaviour. */
+.signing-with-nav .review-sidebar { position:fixed; inset:0 auto 0 0; z-index:30; width:232px; display:flex; flex-direction:column; padding:28px 16px 20px; border-right:1px solid var(--line); background:white; overflow:auto; }
+.review-sidebar > .brand { padding:0 10px; }
+.review-nav-identity { padding:14px 12px; margin:34px 0 24px; border:1px solid var(--line); border-radius:8px; background:#fafbfe; overflow-wrap:anywhere; }
+.review-nav-identity strong,.review-nav-identity > span { display:block; }
+.review-nav-identity strong { font-size:13px; font-weight:600; }
+.review-nav-identity > span { margin-top:5px; color:var(--muted); font-size:11px; }
+.review-sidebar-nav { display:grid; gap:7px; }
+.review-sidebar-nav a { display:flex; align-items:center; gap:11px; min-height:44px; padding:11px 12px; border-radius:7px; color:var(--ink); font-size:13px; text-decoration:none; }
+.review-sidebar-nav a:hover { background:#f8f7fc; }
+.review-sidebar-nav a[aria-current=page] { color:var(--blue); background:var(--blue-soft); }
+.review-sidebar-nav .icon { width:19px; height:19px; }
+.review-sidebar-footer { margin-top:auto; padding:20px 12px 0; color:var(--muted); font-size:11px; }
+.review-sidebar-footer strong,.review-sidebar-footer span { display:block; margin-top:6px; }
+.signing-with-nav .draft-header { margin-left:232px; padding-inline:24px; }
+.signing-with-nav .draft-header .draft-back-link { margin-left:auto; margin-right:0; white-space:nowrap; }
+.review-breadcrumb { display:flex; align-items:center; gap:12px; color:var(--muted); font-size:12px; }
+.review-breadcrumb strong { color:var(--ink); font-weight:500; }
+.signing-with-nav .draft-main { max-width:1440px; margin-left:232px; margin-right:0; padding-inline:24px; }
+@media(min-width:951px) and (max-width:1150px) { .signing-with-nav .signing-layout,.signing-with-nav .signing-layout:has(.signing-helper-rail) { grid-template-columns:220px minmax(0,1fr); gap:20px; } .signing-with-nav .signing-form { padding:18px; } .signing-with-nav .draft-header { gap:16px; } .signing-with-nav .review-breadcrumb { display:none; } }
+@media(max-width:950px) { .signing-with-nav .review-sidebar { position:static; width:auto; padding:16px 20px 12px; border-right:0; border-bottom:1px solid var(--line); } .review-sidebar > .brand { padding:0; font-size:25px; } .review-nav-identity,.review-sidebar-footer { display:none; } .review-sidebar-nav { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; } .review-sidebar-nav a { padding:9px 11px; font-size:12px; } .review-sidebar-nav .icon { width:17px; height:17px; } .signing-with-nav .draft-header { margin-left:0; padding-inline:20px; min-height:64px; } .signing-with-nav .draft-main { margin-left:auto; margin-right:auto; padding-inline:20px; } }
+@media(max-width:480px) { .signing-with-nav .draft-header { flex-wrap:nowrap; gap:12px; } .signing-with-nav .review-breadcrumb { display:none; } .signing-with-nav .draft-header .draft-back-link { order:0; flex-basis:auto; margin-left:0; } .review-sidebar-nav a[aria-current=page] { display:none; } }
+
+.client-signed-preview { padding:18px 20px; margin:0 0 20px; border:1px solid #dfd5b6; border-radius:9px; background:#fffaf0; color:var(--ink); }
+.client-signed-preview strong { display:block; margin-bottom:8px; font-size:15px; }
+.client-signed-preview p { margin:5px 0; color:var(--muted); font-size:12px; line-height:1.7; }
+
+.client-signed-preview[data-complete="true"] { border-color:#cce3d6; background:#f0f8f3; }

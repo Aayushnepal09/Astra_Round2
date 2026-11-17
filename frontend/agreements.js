@@ -1,10 +1,13 @@
 import { SessionClient, SessionError } from './shared/ui.js';
+import { FieldSuggestions } from './field_suggestions.js?v=workflow2';
+import { ScrollDocument } from './shared/scroll_document.js';
 
 export class AgreementWorkspace {
   constructor(navigate) {
     this.navigateWorkspace = navigate;
     this.client = new SessionClient();
     this.companyId = document.body.dataset.companyId;
+    this.jobId = document.body.dataset.uploadJob || null;
     this.baseUrl = new URL(document.body.dataset.agreementsUrl, window.location.origin);
     this.listPage = 1;
     this.pageNumber = 1;
@@ -27,17 +30,21 @@ export class AgreementWorkspace {
     this.previewAttempt = 0;
     this.dateFormatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     this.bindEvents();
+    this.suggestions = new FieldSuggestions(this);
+    this.suggestions.update();
   }
 
   element(id) { return document.getElementById(id); }
 
   bindEvents() {
+    this.element('agreement-add-to-job').addEventListener('click', () => this.addToJob());
     this.element('choose-agreement').addEventListener('click', () => this.element('agreement-file').click());
     this.element('agreement-file').addEventListener('change', event => {
       const file = event.target.files[0];
       if (!file) return;
       this.file = file;
       this.creationKey = crypto.randomUUID();
+      this.uploadJobId = this.element('agreement-upload-scope')?.value === 'job' ? this.jobId : null;
       this.element('agreement-upload-filename').textContent = file.name;
       this.element('agreement-upload-filename').hidden = false;
       event.target.value = '';
@@ -75,6 +82,7 @@ export class AgreementWorkspace {
       this.element('agreement-prepare-toggle').textContent = visible ? 'Hide field tools' : 'Prepare fields';
       this.element('agreement-prepare-toggle').setAttribute('aria-expanded', String(visible));
       this.renderFields();
+      if (visible) { editor.scrollTop = 0; this.element('agreement-ai-fields').scrollIntoView({ block: 'start' }); }
     });
     this.element('agreement-field-editor').addEventListener('click', event => {
       const add = event.target.closest('.field-add');
@@ -135,7 +143,7 @@ export class AgreementWorkspace {
   url(path = '', params = {}) {
     const url = new URL(path, this.baseUrl);
     if (url.origin !== window.location.origin) throw new SessionError('This action must stay within your workspace.');
-    url.search = new URLSearchParams({ workspace_id: this.companyId, ...params });
+    url.search = new URLSearchParams({ workspace_id: this.companyId, ...(this.jobId ? {job_id: this.jobId} : {}), ...params });
     return url;
   }
 
@@ -223,7 +231,8 @@ export class AgreementWorkspace {
       this.element('agreement-format').textContent = `PDF or DOCX · up to ${result.limits.maxBytes / (1024 * 1024)} MiB · ${result.limits.maxPages} PDF pages.`;
       const fragment = document.createDocumentFragment();
       for (const agreement of result.agreements) {
-        const item = document.createElement('li');
+        const item = document.createElement('tr');
+        const nameCell = document.createElement('td'); nameCell.dataset.label = 'Agreement';
         const link = document.createElement('a');
         link.className = 'file-name';
         link.href = `#templates/${agreement.id}`;
@@ -233,18 +242,28 @@ export class AgreementWorkspace {
           event.preventDefault();
           this.navigateWorkspace(`templates/${agreement.id}`);
         });
-        const details = document.createElement('div');
-        details.className = 'agreement-list-details';
+        nameCell.append(link);
+        const stateCell = document.createElement('td'); stateCell.dataset.label = 'Preparation';
         const badge = document.createElement('span');
-        badge.className = 'status-badge waiting';
-        badge.textContent = 'Preparation draft';
+        const ready = !!agreement.readyVersion;
+        badge.className = `status-badge ${ready ? 'success' : 'waiting'}`;
+        badge.textContent = ready ? `Ready · Version ${agreement.readyVersion.number}` : 'Needs preparation';
+        stateCell.append(badge);
+        if (agreement.hasUnpublishedChanges) { const note = document.createElement('span'); note.className = 'agreement-subline'; note.textContent = 'New draft changes need review'; stateCell.append(note); }
+        const details = document.createElement('td'); details.dataset.label = 'Document';
         const processing = document.createElement('span');
         processing.textContent = agreement.processingLabel;
         const saved = document.createElement('span');
         const date = new Date(agreement.createdAt);
         saved.textContent = [agreement.pageCount ? `${agreement.pageCount} ${agreement.pageCount === 1 ? 'page' : 'pages'}` : '', Number.isNaN(date.getTime()) ? '' : this.dateFormatter.format(date)].filter(Boolean).join(' · ');
-        details.append(badge, processing, saved);
-        item.append(link, details);
+        saved.className = 'agreement-subline';
+        details.append(processing, saved);
+        const actions = document.createElement('td'); actions.dataset.label = 'Next action';
+        const prepare = document.createElement('a'); prepare.href = link.href; prepare.className = 'button secondary compact';
+        prepare.textContent = ready ? 'Review / edit' : 'Prepare fields'; prepare.addEventListener('click', event => { if (this.plainClick(event)) { event.preventDefault(); this.navigateWorkspace(`templates/${agreement.id}`); } });
+        actions.append(prepare);
+        if (ready) { const use = document.createElement('a'); use.href = '#files'; use.dataset.view = 'files'; use.className = 'button compact'; use.textContent = 'Use for client'; actions.append(use); }
+        item.append(nameCell, stateCell, details, actions);
         fragment.append(item);
       }
       this.element('agreement-list').replaceChildren(fragment);
@@ -317,6 +336,7 @@ export class AgreementWorkspace {
       xhr.setRequestHeader('X-Workspace-ID', this.companyId);
       xhr.setRequestHeader('X-Upload-Key', this.creationKey);
       xhr.setRequestHeader('X-Upload-Filename', encodeURIComponent(this.file.name));
+      if (this.uploadJobId) xhr.setRequestHeader('X-Agreement-Job', this.uploadJobId);
       xhr.upload.addEventListener('progress', event => {
         if (event.lengthComputable) {
           const percent = Math.round(event.loaded / event.total * 100);
@@ -344,6 +364,7 @@ export class AgreementWorkspace {
   }
 
   async open(id, published = false) {
+    this.clearImage();
     this.fieldSession++;
     this.fieldsSaving = false;
     this.publishing = false;
@@ -358,6 +379,8 @@ export class AgreementWorkspace {
     this.element('agreement-fields-status').classList.remove('has-error');
     this.element('agreement-fields-status').textContent = 'No unsaved field changes.';
     this.element('agreement-publish-status').textContent = '';
+    this.element('preparation-complete').hidden = true;
+    this.element('preparation-progress').hidden = false;
     this.element('agreement-publish-error').hidden = true;
     this.element('agreement-published-versions').hidden = true;
     this.element('agreement-preview-error').hidden = true;
@@ -402,7 +425,16 @@ export class AgreementWorkspace {
       this.element('agreement-page-viewport').classList.remove('is-enlarged');
       this.element('agreement-zoom').textContent = 'Enlarge page';
       this.element('agreement-zoom').setAttribute('aria-pressed', 'false');
-      this.loadPage(1);
+      this.viewer = new ScrollDocument({
+        root: this.element('agreement-page-viewport'), count: this.agreement.pageCount,
+        geometry: this.agreement.pageGeometry, url: number => this.url(`${this.agreement.pageUrl}${number}/`),
+        onPage: number => { this.selectPage(number); this.renderFields(); },
+        onLoad: () => this.renderFields(),
+        onError: error => { if (!this.handleSession(error)) this.showError('agreement-preview-error', error.message); },
+      });
+      this.element('agreement-page-viewport').hidden = false;
+      this.selectPage(1);
+      this.renderFields();
     } catch (error) {
       if (error.name === 'AbortError' || this.handleSession(error)) return;
       this.element('agreement-preview-filename').textContent = 'Agreement unavailable';
@@ -411,59 +443,34 @@ export class AgreementWorkspace {
     }
   }
 
-  async loadPage(number) {
-    if (!this.agreement || number < 1 || number > this.agreement.pageCount) return;
-    this.pageController?.abort();
-    const controller = new AbortController();
-    this.pageController = controller;
-    const attempt = ++this.previewAttempt;
-    this.clearImage();
+  selectPage(number) {
     this.pageNumber = number;
-    this.stopFieldPointer?.();
-    if (this.currentField()?.page !== number) this.selectedFieldId = null;
+    if (!this.dragState && this.currentField()?.page !== number) this.selectedFieldId = null;
     this.element('agreement-page-number').value = number;
     this.element('previous-agreement-page').disabled = number <= 1;
     this.element('next-agreement-page').disabled = number >= this.agreement.pageCount;
-    this.element('agreement-preview-error').hidden = true;
-    this.element('agreement-page-status').textContent = `Loading page ${number} of ${this.agreement.pageCount}…`;
-    this.element('agreement-zoom').disabled = true;
-    this.element('retry-agreement-preview').disabled = true;
-    try {
-      const response = await fetch(this.url(`${this.agreement.pageUrl}${number}/`), { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
-      if (!response.ok) {
-        let result = {};
-        try { result = await response.json(); } catch { /* A proxy may return a non-JSON failure. */ }
-        throw new SessionError(result.error || 'This page could not be loaded. Try again.', response.status, {}, result.code);
-      }
-      if (!response.headers.get('Content-Type')?.startsWith('image/png')) throw new SessionError('The server did not return a page preview. Try again.');
-      const blob = await response.blob();
-      if (attempt !== this.previewAttempt || controller.signal.aborted) return;
-      this.objectUrl = URL.createObjectURL(blob);
-      const image = this.element('agreement-page-image');
-      image.alt = `${this.agreement.filename}, page ${number} of ${this.agreement.pageCount}`;
-      image.src = this.objectUrl;
-      await image.decode();
-      if (attempt !== this.previewAttempt || controller.signal.aborted) return;
-      this.element('agreement-page-viewport').hidden = false;
-      this.element('agreement-page-status').textContent = `Page ${number} of ${this.agreement.pageCount}. Enlarge the page to read smaller text.`;
-      this.element('agreement-zoom').disabled = false;
-      this.renderFields();
-    } catch (error) {
-      if (error.name === 'AbortError' || attempt !== this.previewAttempt || this.handleSession(error)) return;
-      this.clearImage();
-      this.element('agreement-page-status').textContent = `Page ${number} could not be displayed.`;
-      this.showError('agreement-preview-error', error instanceof SessionError ? error.message : 'Could not display this page. Try again.');
-    } finally {
-      if (attempt === this.previewAttempt) this.element('retry-agreement-preview').disabled = false;
-    }
+    this.element('agreement-page-status').textContent = `Page ${number} of ${this.agreement.pageCount}. Scroll to read the full agreement.`;
+    this.element('agreement-zoom').disabled = false;
+  }
+
+  loadPage(number) {
+    if (!this.viewer || number < 1 || number > this.agreement.pageCount) return;
+    this.selectPage(number);
+    this.viewer.goTo(number);
+    this.renderFields();
+  }
+
+  revealField(field) {
+    this.selectedFieldId = field.id;
+    this.selectPage(field.page);
+    this.viewer?.revealField(field);
+    this.renderFields();
   }
 
   clearImage() {
+    this.viewer?.destroy();
+    this.viewer = null;
     this.element('agreement-page-viewport').hidden = true;
-    this.element('agreement-page-image').removeAttribute('src');
-    if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
-    this.objectUrl = null;
-    this.element('agreement-field-layer').replaceChildren();
   }
 
   currentField() {
@@ -497,7 +504,7 @@ export class AgreementWorkspace {
     this.fields.push(field);
     this.selectedFieldId = field.id;
     this.markFieldsDirty();
-    this.renderFields();
+    this.revealField(field);
   }
 
   deleteSelectedField() {
@@ -528,15 +535,21 @@ export class AgreementWorkspace {
   }
 
   renderFields(syncProperties = true) {
-    const layer = this.element('agreement-field-layer');
+    this.suggestions?.renderPreview();
+    const layers = [...(this.viewer?.pages.values() || [])].map(page => page.fields);
     const activeField = document.activeElement?.dataset.fieldId;
-    layer.inert = this.publishedView || this.element('agreement-field-editor').hidden;
-    layer.replaceChildren();
+    for (const layer of layers) {
+      layer.hidden = [...this.viewer.pages.values()].find(page => page.fields === layer).image.hidden;
+      layer.inert = this.publishedView || this.element('agreement-field-editor').hidden;
+      layer.replaceChildren();
+    }
     const pageFields = this.fields.filter(item => item.page === this.pageNumber);
     const picker = this.element('agreement-field-picker');
     picker.replaceChildren(new Option('Choose a field on this page', ''));
-    for (const field of pageFields) {
-      picker.add(new Option(`${field.label || field.type} · ${field.role}`, field.id));
+    for (const field of pageFields) picker.add(new Option(`${field.label || field.type} · ${field.role}`, field.id));
+    for (const field of this.fields) {
+      const layer = this.viewer?.pages.get(field.page)?.fields;
+      if (!layer) continue;
       const element = document.createElement('button');
       element.type = 'button';
       element.className = 'agreement-field';
@@ -554,10 +567,23 @@ export class AgreementWorkspace {
       element.append(resize);
       element.addEventListener('click', event => {
         event.stopPropagation();
+        this.selectPage(field.page);
         this.selectedFieldId = field.id;
         this.renderFields();
       });
       element.addEventListener('keydown', event => {
+        if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) && !this.element('agreement-field-editor').hidden) {
+          event.preventDefault();
+          this.selectedFieldId = field.id;
+          const horizontal = ['ArrowLeft', 'ArrowRight'].includes(event.key);
+          const delta = ['ArrowLeft', 'ArrowUp'].includes(event.key) ? -0.005 : 0.005;
+          const key = event.shiftKey ? horizontal ? 'width' : 'height' : horizontal ? 'x' : 'y';
+          const minimum = event.shiftKey ? 0.01 : 0;
+          const maximum = 1 - (event.shiftKey ? field[horizontal ? 'x' : 'y'] : field[horizontal ? 'width' : 'height']);
+          field[key] = Math.min(maximum, Math.max(minimum, field[key] + delta));
+          this.markFieldsDirty();
+          this.renderFields();
+        }
         if (event.key === 'Delete' || event.key === 'Backspace') {
           event.preventDefault();
           this.selectedFieldId = field.id;
@@ -570,13 +596,14 @@ export class AgreementWorkspace {
     }
     picker.value = this.selectedFieldId || '';
     if (activeField && !this.dragState) {
-      [...layer.children].find(element => element.dataset.fieldId === activeField)?.focus({ preventScroll: true });
+      layers.flatMap(layer => [...layer.children]).find(element => element.dataset.fieldId === activeField)?.focus({ preventScroll: true });
     }
     const selected = this.currentField();
     this.element('agreement-field-properties').hidden = !selected;
     if (selected && syncProperties) {
       this.element('agreement-field-label').value = selected.label;
       this.element('agreement-field-role').value = selected.role;
+      this.element('agreement-field-role').querySelector('[value="preparation"]').disabled = !['text', 'name', 'date'].includes(selected.type);
       this.element('agreement-field-required').checked = selected.required;
       for (const key of ['x', 'y', 'width', 'height']) this.element(`agreement-field-${key}`).value = Number(selected[key].toFixed(4));
     }
@@ -587,7 +614,9 @@ export class AgreementWorkspace {
     this.stopFieldPointer?.();
     event.preventDefault();
     this.selectedFieldId = field.id;
-    const canvas = this.element('agreement-page-canvas');
+    this.selectPage(field.page);
+    this.selectedFieldId = field.id;
+    const canvas = this.viewer.pages.get(field.page).canvas;
     const rect = canvas.getBoundingClientRect();
     this.dragState = {
       field, resizing, startX: event.clientX, startY: event.clientY,
@@ -666,7 +695,7 @@ export class AgreementWorkspace {
       }
       this.element('agreement-fields-status').textContent = this.fieldsDirty
         ? 'Earlier changes saved. You have newer unsaved field changes.'
-        : 'Field draft saved. Agreement remains Unprepared.';
+        : this.agreement.jobId ? 'Saved draft. Save a ready agreement, then add it to this job.' : 'Saved draft. Publish a version to use these fields on client files.';
       this.renderFields();
       this.renderVersions();
     } catch (error) {
@@ -687,16 +716,54 @@ export class AgreementWorkspace {
   }
 
   updatePublicationControls() {
+    this.suggestions?.update();
+    this.element('agreement-add-to-job').disabled = this.fieldsDirty || this.fieldsSaving || this.publishing || !!this.addingToJob;
     const button = this.element('agreement-publish');
     button.disabled = !this.agreement || this.publishedView || this.fieldsDirty || this.fieldsSaving || this.publishing;
-    button.textContent = this.publishing ? 'Publishing…' : 'Publish template';
+    const issues = [];
+    if (!this.element('agreement-template-name').value.trim()) issues.push('Name this agreement.');
+    if (!this.fields.some(field => field.role === 'client' && field.type === 'signature' && field.required)) issues.push('Add a required client signature.');
+    if (this.fields.some(field => field.role === 'company') && !this.fields.some(field => field.role === 'company' && field.type === 'signature' && field.required)) issues.push('Add a required company signature.');
+    const latest = this.agreement?.versions?.[0] || this.agreement?.readyVersion;
+    const prepared = this.publishedView || !!latest && !this.fieldsDirty && latest.sourceRevision === this.agreement?.fieldsRevision;
+    this.element('preparation-status').textContent = this.publishedView ? 'Ready version · read only' : this.fieldsDirty ? 'Unsaved field changes' : prepared ? 'Preparation complete' : issues.length ? 'Preparation in progress' : 'Ready to finish preparation';
+    this.element('preparation-next').textContent = this.publishedView ? 'This version is fixed and ready for use.' : this.fieldsDirty ? 'Save the field draft, then finish preparation. Existing published versions stay unchanged.' : prepared ? 'Use this ready version for a client and job.' : issues.length ? issues.join(' ') : 'Fields are saved. Finish preparation to make this version ready; nothing is sent to the client yet.';
+    for (const step of this.element('preparation-progress').querySelectorAll('[data-prep-step]')) {
+      step.dataset.state = step.dataset.prepStep === 'upload' || (step.dataset.prepStep === 'fields' && !issues.length) || prepared ? 'done' : 'pending';
+    }
+    const state = this.element('agreement-version-state');
+    if (!this.publishedView && this.agreement) { state.textContent = prepared ? `Preparation complete · Version ${latest.number}` : latest ? 'Ready version saved · editing draft' : 'Preparation in progress'; state.className = `status-badge ${prepared ? 'success' : 'waiting'}`; }
+    button.textContent = this.publishing ? 'Finishing preparation…' : prepared ? 'Preparation complete' : 'Finish preparation';
+    button.disabled ||= !!issues.length || prepared;
     button.setAttribute('aria-busy', String(this.publishing));
     this.element('agreement-publish-hint').textContent = this.fieldsDirty || this.fieldsSaving
       ? 'Save your draft changes before publishing.'
-      : 'Publication requires a template name and a required client signature. Include a required company signature if any fields use the company role.';
+      : prepared ? 'Ready to use. Review and issue a signing request from the client’s job.' : issues.length ? issues.join(' ') : 'Creates a ready, fixed version. You will review the recipient before sending.';
+  }
+
+  async addToJob() {
+    const version = this.agreement?.versions?.[0];
+    if (!version || !this.jobId || this.fieldsDirty || this.fieldsSaving || this.publishing || this.addingToJob) return;
+    this.addingToJob = true;
+    this.updatePublicationControls();
+    const status = this.element('agreement-job-status');
+    status.textContent = 'Adding this ready version to the job…';
+    this.jobAdditionKeys ||= new Map();
+    if (!this.jobAdditionKeys.has(version.id)) this.jobAdditionKeys.set(version.id, crypto.randomUUID());
+    try {
+      const result = this.checkCompany(await this.client.request(document.body.dataset.jobAddUrl, {
+        workspace_id: this.companyId, creation_key: this.jobAdditionKeys.get(version.id), versions: [version.id],
+      }));
+      if (!result.createdFiles?.[0]?.detailUrl) throw new SessionError('The addition could not be confirmed. Retry to check the saved result.');
+      window.location.assign(result.createdFiles[0].detailUrl);
+    } catch (error) { status.textContent = error.message; }
+    finally { this.addingToJob = false; this.updatePublicationControls(); }
   }
 
   renderVersions() {
+    this.element('agreement-create-file').hidden = !this.agreement?.versions?.length || !!this.jobId;
+    this.element('agreement-add-to-job').hidden = !this.jobId || !this.agreement?.versions?.length;
+    this.element('agreement-add-to-job').disabled = this.fieldsDirty || this.fieldsSaving || this.publishing;
     const container = this.element('agreement-published-versions');
     container.hidden = this.publishedView || !this.agreement;
     const list = this.element('agreement-version-list');
@@ -747,9 +814,24 @@ export class AgreementWorkspace {
       if (!payload.version?.id) throw new SessionError('Publication could not be confirmed. Retry this saved revision.');
       const versions = this.agreement.versions || [];
       this.agreement.versions = [payload.version, ...versions.filter(version => version.id !== payload.version.id)];
+      this.agreement.readyVersion = payload.version;
       this.element('published-template-count').textContent = `${payload.publishedCount} published versions`;
       this.renderVersions();
-      this.element('agreement-publish-status').textContent = `Published ${payload.version.name}, Version ${payload.version.number}. This snapshot can now be selected for client files.${this.fieldsDirty ? ' Newer draft changes are still unsaved.' : ''}`;
+      this.element('agreement-publish-status').textContent = this.agreement.jobId
+        ? `Ready: ${payload.version.name}, Version ${payload.version.number}. Available for this job only. Select Add latest ready version to this job to continue.`
+        : `Published ${payload.version.name}, Version ${payload.version.number}. This snapshot can now be selected for client files.${this.fieldsDirty ? ' Newer draft changes are still unsaved.' : ''}`;
+      if (!this.fieldsDirty) {
+        this.publishing = false;
+        this.updatePublicationControls();
+        if (this.jobId) {
+          await this.addToJob();
+        } else {
+          this.element('preparation-complete-copy').textContent = `${payload.version.name} · Version ${payload.version.number} is ready. Choose a client and job to review and send it.`;
+          this.element('preparation-complete').hidden = false;
+          this.navigateWorkspace('templates');
+          this.element('preparation-complete').scrollIntoView({block:'center',behavior:'smooth'});
+        }
+      }
     } catch (error) {
       if (session !== this.fieldSession) return;
       this.element('agreement-publish-status').textContent = 'Publication needs attention.';
@@ -765,6 +847,7 @@ export class AgreementWorkspace {
   }
 
   suspend() {
+    this.suggestions?.reset();
     this.stopFieldPointer?.();
     this.listController?.abort();
     this.detailController?.abort();

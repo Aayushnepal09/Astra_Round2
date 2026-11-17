@@ -1,35 +1,90 @@
 {% extends "shared/base.html" %}
 {% block title %}Review agreement · Astra{% endblock %}
 {% block resources %}
-  <link rel="stylesheet" href="{{ static_prefix }}client_file.css">
-  <link rel="stylesheet" href="{{ static_prefix }}client_agreement.css">
-  <script type="module" src="{{ static_prefix }}client_agreement.js"></script>
+  <link rel="stylesheet" href="{{ static_prefix }}client_file.css?v=ui5">
+  <link rel="stylesheet" href="{{ static_prefix }}client_agreement.css?v=ui5">
+  <link rel="stylesheet" href="{{ static_prefix }}shared/scroll_document.css">
+  <script type="module" src="{{ static_prefix }}client_agreement.js?v=countersign1"></script>
+  <link rel="stylesheet" href="{{ static_prefix }}workflow.css?v=workflow2">
+  <link rel="stylesheet" href="{{ static_prefix }}review_sidebar.css?v=countersign1">
 {% endblock %}
-{% block body_attributes %}class="draft-editor" data-logout-url="{{ logout_url }}" data-invitation-url="{{ invitation_url }}" data-signing-url="{{ signing_url }}"{% endblock %}
+{% block body_attributes %}class="draft-editor signing-with-nav" data-logout-url="{{ logout_url }}" data-invitation-url="{{ invitation_url }}" data-signing-url="{{ signing_url }}" data-assistant-url="{{ assistant_url }}"{% endblock %}
 {% block content %}
   <a class="draft-skip-link" href="#agreement-main">Skip to agreement</a>
+  <aside class="review-sidebar" aria-label="{% if company_signing %}Company{% else %}Client{% endif %} navigation">
+    <a class="brand" href="{% if company_signing %}{{ dashboard_url }}{% else %}{{ portal_url }}{% endif %}" aria-label="Astra home"><span class="reference-logo"><svg aria-hidden="true"><use href="#icon-check"/></svg></span>astra</a>
+    <div class="review-nav-identity"><strong>{% if company_signing %}{{ company_name }}{% else %}{{ client_name }}{% endif %}</strong><span>{% if company_signing %}Company workspace{% else %}Client portal{% endif %}</span></div>
+    <nav class="review-sidebar-nav" aria-label="Agreement navigation">
+      <a href="{% if company_signing %}{{ dashboard_url }}#files{% else %}{{ portal_url }}{% endif %}"><svg class="icon" aria-hidden="true"><use href="#icon-grid"/></svg>{% if company_signing %}Workspace home{% else %}Agreements home{% endif %}</a>
+      <a href="#agreement-main" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#icon-document"/></svg>Current agreement</a>
+      <a href="{% if company_signing %}{{ file_url }}{% else %}{{ portal_url }}?filter=signed{% endif %}"><svg class="icon" aria-hidden="true"><use href="#icon-folder"/></svg>{% if company_signing %}Client file{% else %}Signed documents{% endif %}</a>
+    </nav>
+    <div class="review-sidebar-footer"><strong>{{ company_name }}</strong><span>{% if company_signing %}Company signing access{% else %}Your service provider{% endif %}</span></div>
+  </aside>
   <header class="draft-header">
-    <span class="brand"><svg aria-hidden="true"><use href="#astra-mark"/></svg>astra<span class="brand-dot">.</span></span>
-    {% if company_signing %}<a class="draft-back-link" href="{{ file_url }}">Back to client file</a>{% endif %}
+    <div class="review-breadcrumb"><span>{% if company_signing %}Workspace{% else %}Client portal{% endif %}</span><span aria-hidden="true">/</span><strong>Agreement</strong></div>
+    {% if company_signing %}<a class="draft-back-link" href="{{ file_url }}">Back to client file</a>{% else %}<a class="draft-back-link" href="{{ portal_url }}">Back to agreements</a>{% endif %}
     <button class="button secondary" type="button" id="review-logout">Log out</button>
   </header>
   <main class="draft-main" id="agreement-main" tabindex="-1">
-    <div class="draft-heading"><div><h1>{{ agreement_name }}</h1><p>Version {{ version_number }} · {% if company_signing %}Company countersignature as{% else %}Signing as{% endif %} {{ signer_name }}</p></div><span class="draft-badge" id="signing-progress">{% if company_signing %}Awaiting company{% else %}Awaiting client{% endif %}</span></div>
+    <div class="draft-heading"><div><h1>{{ agreement_name }}</h1><p>Version {{ version_number }} · {% if company_signing %}Company countersignature as{% else %}Signing as{% endif %} {{ signer_name }}</p></div><span class="draft-badge" id="signing-progress">{% if company_signing %}Company signature required{% else %}Awaiting client{% endif %}</span></div>
+    {% if company_signing %}<section class="client-signed-preview" data-complete="{{ agreement_completed|yesno:'true,false' }}" role="status" aria-label="Client signature received"><strong id="client-signature-status-title">{% if company_signature_pending %}Client signed · your company signature is required{% else %}Client signature recorded{% endif %}</strong><p>{{ client_signer_name }} signed on <time datetime="{{ client_signed_at|date:'c' }}">{{ client_signed_at|date:"M j, Y g:i A T" }}</time>. Their accepted signature and entries are shown on the document below.</p><p id="company-preview-status">{% if company_signature_pending %}This is an in-progress preview. The final signed PDF is available after all required signatures are received.{% elif agreement_completed %}All required signatures are received. The completed document is available from the client file.{% else %}All required signatures are recorded. Final document processing is pending.{% endif %}</p></section>{% endif %}
     <p class="review-notice" id="signing-notice">{% if company_signing %}The client’s submission is recorded. This file remains pending your company countersignature. {% endif %}Review the agreement, complete your assigned fields, and confirm your intent to sign. Only Sign &amp; submit records your signature.</p>
-    <section id="signing-confirmation" class="signing-confirmation" tabindex="-1" aria-labelledby="confirmation-heading" hidden><h2 id="confirmation-heading">Your submission is recorded.</h2><p id="confirmation-copy"></p><p id="confirmation-time"></p><p id="confirmation-reference"></p></section>
+    <section id="signing-confirmation" class="signing-confirmation" tabindex="-1" aria-labelledby="confirmation-heading" hidden>
+      <h2 id="confirmation-heading">Your submission is recorded.</h2>
+      <p id="confirmation-copy"></p><p id="confirmation-time"></p><p id="confirmation-reference"></p>
+      <p id="client-completion-error" role="alert" hidden></p>
+      <div id="client-completed-downloads" hidden>
+        <div class="signing-actions">
+          <a class="button secondary" id="client-completed-view" target="_blank" rel="noopener noreferrer">View completed PDF</a>
+          <a class="button secondary" id="client-completed-download" target="_blank" rel="noopener noreferrer">Download completed PDF</a>
+        </div>
+      </div>
+    </section>
     <noscript><p class="draft-alert">Enable JavaScript to review agreement pages.</p></noscript>
+    <nav class="signing-jump" aria-label="Review and signing"><a href="#signing-document">View agreement</a><a id="signing-fields-link" href="#signing-form">Complete required fields</a></nav>
     <div class="signing-layout">
-    <section aria-label="Agreement document" class="signing-document">
+    <div id="signing-form-slot" class="signing-field-rail">
+    <form id="signing-form" class="signing-form" tabindex="-1" novalidate aria-labelledby="signing-heading">
+      <button class="button secondary" id="signing-editor-close" type="button" hidden>Done editing · back to document</button>
+      <h2 id="signing-heading">{% if company_signing %}Company fields{% else %}Your fields{% endif %}</h2>
+      <p class="field-hint" id="signing-field-instructions">Tap a numbered box or use Next required field. Apply your signature to each signature box individually.</p>
+      <p id="signing-required-progress" class="field-hint" role="status" aria-live="polite"></p>
+      <p class="field-hint" id="signing-next-step">Complete your required fields, then review and sign.</p>
+      <div class="signing-actions"><button class="button" id="signing-next-field" type="button">Next required field</button></div>
+      <details class="signing-tools"><summary>Choose a field or autofill</summary>
+      <label for="signing-field-select">Jump to field</label><select id="signing-field-select" aria-label="Choose a numbered field"></select>
+      <button class="button secondary" id="signing-autofill" type="button">Fill my name and email</button>
+      <p class="field-hint">Only empty name and email fields are filled. Review them before signing.</p></details>
+      <fieldset id="signing-fields"><legend class="sr-only">Assigned signer fields</legend><div id="signing-inputs"></div></fieldset>
+      <div class="signing-consent"><label for="signing-consent"><input id="signing-consent" type="checkbox"><span id="signing-consent-copy"></span></label><p id="consent-error" class="field-error" hidden></p></div>
+      <p id="signing-status" class="field-hint" role="status" aria-live="polite"></p>
+      <p id="signing-error" class="field-error" role="alert" hidden></p>
+      <a id="signing-reverify" class="draft-back-link" href="{{ invitation_url }}" target="_blank" rel="noopener" hidden>{% if company_signing %}Sign in to this company in a new tab, then check status here{% else %}Verify access in a new tab, then check status here{% endif %}</a>
+      <p id="signing-save-state" class="field-hint signing-save-state" role="status" aria-live="polite">No unsaved changes.</p>
+      <div class="signing-actions signing-primary-actions"><button class="button" id="signing-submit" type="submit">Sign &amp; submit</button><button class="button secondary" id="signing-save" type="button">Save progress</button></div>
+      <details class="signing-recovery" id="signing-recovery"><summary>Status and saved progress</summary><div class="signing-actions"><button class="button secondary" id="signing-check" type="button">Check submission status</button><button class="button secondary" id="signing-restore" type="button">Load saved progress</button></div></details>
+      <p class="field-hint" id="signing-help">Save progress before leaving. Only Sign &amp; submit records your signature.</p>
+    </form>
+    </div>
+    <section aria-label="Agreement document" class="signing-document" id="signing-document" tabindex="-1">
     <nav class="review-controls" aria-label="Agreement pages">
-      <button class="button secondary" id="review-previous" type="button">Previous page</button>
-      <span id="review-page-label" aria-live="polite"></span>
-      <button class="button secondary" id="review-next" type="button">Next page</button>
+      <label for="review-page-number">Page</label><input id="review-page-number" type="number" min="1" max="{{ review_data.pageCount }}" value="1" inputmode="numeric"><span id="review-page-label"></span>
       <label for="review-zoom">Zoom</label><select id="review-zoom"><option value="100">Fit width</option><option value="125">125%</option><option value="150">150%</option><option value="200">200%</option></select>
+      <span id="review-required-progress" class="review-required-progress" role="status" aria-live="polite"></span>
+      <button class="button secondary" id="review-next-required" type="button">Next required field</button>
     </nav>
     <p id="review-status" class="field-hint" role="status" aria-live="polite"></p>
     <div id="review-error" class="draft-alert" role="alert" hidden><p id="review-error-copy"></p><button class="button secondary" id="review-retry" type="button">Retry page</button><a href="{{ invitation_url }}" target="_blank" rel="noopener">{% if company_signing %}Company sign-in{% else %}Verify access again{% endif %}</a></div>
-    <div class="review-viewport" id="review-viewport" tabindex="0" aria-label="Agreement preview"><div id="review-sheet" class="review-sheet"><img id="review-image" alt="" hidden><div id="review-field-markers" aria-hidden="true"></div></div></div>
+    <div class="review-viewport" id="review-viewport" tabindex="0" aria-label="Agreement pages in reading order"></div>
     <p class="field-hint">Preview pages are images. Contact the company if you need an accessible text copy.</p>
+    {% if preparation_values %}
+    <section class="client-submitted-values" aria-labelledby="preparation-values-heading">
+      <h2 id="preparation-values-heading">Company-prepared agreement details</h2>
+      <p class="field-hint">Fixed when this request was issued. Review these values before confirming your intent to sign.</p>
+      <dl>{% for field in preparation_values %}<dt>{{ field.label|default:field.type }} · Page {{ field.page }}</dt><dd>{{ field.value|default:"Not provided" }}</dd>{% endfor %}</dl>
+    </section>
+    {% endif %}
     {% if company_signing %}
     <section class="client-submitted-values" aria-labelledby="client-values-heading">
       <h2 id="client-values-heading">Client’s submitted values</h2>
@@ -38,20 +93,38 @@
     </section>
     {% endif %}
     </section>
-    <form id="signing-form" class="signing-form" novalidate aria-labelledby="signing-heading">
-      <h2 id="signing-heading">{% if company_signing %}Company fields{% else %}Your fields{% endif %}</h2>
-      <p class="field-hint">Fields refer to the numbered positions on each agreement page. Typed signatures use plain text, not drawn handwriting.</p>
-      <fieldset id="signing-fields"><legend class="sr-only">Assigned signer fields</legend><div id="signing-inputs"></div></fieldset>
-      <div class="signing-consent"><label for="signing-consent"><input id="signing-consent" type="checkbox"><span id="signing-consent-copy"></span></label><p id="consent-error" class="field-error" hidden></p></div>
-      <p id="signing-status" class="field-hint" role="status" aria-live="polite"></p>
-      <p id="signing-error" class="field-error" role="alert" hidden></p>
-      <a id="signing-reverify" class="draft-back-link" href="{{ invitation_url }}" target="_blank" rel="noopener" hidden>{% if company_signing %}Sign in to this company in a new tab, then check status here{% else %}Verify access in a new tab, then check status here{% endif %}</a>
-      <div class="signing-actions"><button class="button secondary" id="signing-save" type="button">Save progress</button><button class="button" id="signing-submit" type="submit">Sign &amp; submit</button></div>
-      <div class="signing-actions"><button class="button secondary" id="signing-check" type="button">Check submission status</button><button class="button secondary" id="signing-restore" type="button">Load saved progress</button></div>
-      <p class="field-hint">Saving progress does not sign. Unsaved edits stay in this tab during errors; save progress before leaving. Consent must be confirmed for submission.</p>
-    </form>
+    {% if not company_signing %}
+    <aside class="signing-helper-rail" aria-label="Document assistance">
+    <details class="agreement-assistant" id="agreement-assistant" aria-labelledby="assistant-heading" open>
+      <summary id="assistant-heading">Agreement helper</summary>
+      <div class="assistant-content">
+      <p class="field-hint" id="assistant-help">Ask about this agreement. Answers include supporting pages.</p>
+      <button type="button" class="button secondary" id="assistant-summary">Summarize this agreement</button>
+      <form id="assistant-form" aria-describedby="assistant-help">
+        <label for="assistant-question">Your question</label>
+        <textarea id="assistant-question" name="question" rows="2" maxlength="2000" placeholder="What does this agreement say about payment?" required></textarea>
+        <div class="signing-actions"><button class="button secondary" type="submit" id="assistant-ask">Ask about this agreement</button></div>
+      </form>
+      <details class="assistant-about"><summary>About this helper</summary><p class="field-hint">Questions and relevant agreement text are sent to Groq. The helper explains this document; it cannot recommend whether to sign, change terms, or sign for you.</p></details>
+      <p class="field-hint" id="assistant-status" role="status" aria-live="polite">Checking assistant availability…</p>
+      <p class="field-error" id="assistant-error" role="alert" hidden></p>
+      <button class="button secondary" id="assistant-recheck" type="button">Check assistant availability</button>
+      <div id="assistant-answer" aria-label="Assistant answer" tabindex="-1" hidden></div>
+      </div>
+    </details>
+    </aside>
+    {% endif %}
     </div>
     <footer class="draft-footer">Astra agreement portal</footer>
   </main>
+  <dialog id="signature-dialog" aria-labelledby="signature-title" aria-describedby="signature-description">
+    <form id="signature-adoption">
+      <h2 id="signature-title">Confirm your typed signature</h2>
+      <p id="signature-description">This applies your signature to the selected field. Tap each additional signature box to apply it there. Nothing is submitted until you confirm consent and select Sign &amp; submit.</p>
+      <label for="signature-name">Your assigned signer name</label><input id="signature-name" type="text" required autocomplete="off">
+      <p id="signature-error" class="field-error" role="alert" hidden></p>
+      <div class="signing-actions"><button class="button" type="submit">Use signature for this field</button><button class="button secondary" id="signature-cancel" type="button">Cancel</button></div>
+    </form>
+  </dialog>
   {{ review_data|json_script:"review-data" }}
 {% endblock %}

@@ -1,0 +1,67 @@
+/* One visual language across access, company workspace and signing. */
+:root { --ink:#222b3b; --muted:#61718c; --blue:#6550df; --blue-hover:#5340c8; --blue-soft:#f0ecff; --canvas:#f6f7fb; --surface:#fff; --cream:#fff; --line:#e0e5ef; --radius:8px; font-family:Inter,"Segoe UI",system-ui,sans-serif; }
+body { color:var(--ink); background:var(--canvas); }
+::selection { color:#302358; background:#ded7ff; }
+input,textarea { caret-color:var(--blue); }
+input[type=checkbox],input[type=radio],progress { accent-color:var(--blue); }
+.brand { gap:10px; font-family:inherit; font-size:29px; font-weight:650; letter-spacing:-.025em; }
+.reference-logo { display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; width:30px; height:30px; border-radius:9px; background:var(--blue); color:#fff; }
+.brand .reference-logo svg { width:20px; height:20px; margin:0; stroke-width:2; }
+body:not(.reference-ui) .button { border-radius:7px; font-weight:600; box-shadow:none; transition:background .15s ease,border-color .15s ease; }
+body:not(.reference-ui) .button:not(.secondary):not(.danger):not(:disabled) { background:var(--blue); border-color:var(--blue); color:white; }
+body:not(.reference-ui) .button:not(.secondary):not(.danger):not(:disabled):hover { background:var(--blue-hover); }
+body:not(.reference-ui) .button.secondary { background:#fff; border-color:var(--line); color:var(--ink); }
+body:not(.reference-ui) .button.secondary:hover { background:#f8f7fd; border-color:#ccc4ed; }
+body:not(.reference-ui) .button.danger { color:#a92e28; border-color:#e1beb9; background:#fff8f7; }
+body:not(.reference-ui) .input-wrap { background:white; border-color:var(--line); }
+body:not(.reference-ui) .input-wrap:focus-within { border-color:var(--blue); box-shadow:0 0 0 3px #6550df14; }
+.draft-header { min-height:76px; background:white; position:sticky; top:0; z-index:20; padding-block:16px; }
+.draft-header .draft-back-link { margin:0 auto 0 8px; font-weight:500; color:var(--muted); }
+.draft-header .draft-back-link:hover { color:var(--blue); }
+.draft-main { padding-top:30px; }
+.draft-heading h1 { font-weight:650; letter-spacing:-.025em; }
+.draft-badge { color:#5742ba; background:var(--blue-soft); border-radius:5px; font-size:12px; }
+.draft-section,.signing-form,.agreement-assistant,.signing-confirmation { border-color:var(--line); border-radius:10px; box-shadow:none; }
+.draft-section h2,.signing-form h2,.agreement-assistant h2 { color:var(--ink); font-size:18px; font-weight:600; letter-spacing:-.015em; }
+.draft-section input:not([type=checkbox]),.draft-section textarea,.draft-section select,.signing-form input:not([type=checkbox]),.signing-form textarea,.signing-form select { border-color:var(--line); border-radius:6px; }
+.review-notice { color:var(--muted); border-color:var(--line); background:white; font-size:13px; line-height:1.7; }
+.review-viewport { background:#edf0f6; border-color:var(--line); border-radius:10px; }
+.review-field-marker:not([data-complete=true]) { color:#493594; border-color:#7964d7; background:rgb(240 236 255 / 93%); }
+.signing-field-card { border-color:var(--line); border-radius:8px; }
+.signing-field-card[data-active=true] { border-color:var(--blue); background:#faf8ff; }
+.signing-jump a { font-size:13px; font-weight:500; }
+.agreement-assistant { background:#fbfaff; }
+.agreement-assistant > summary { font-weight:600; }
+.signing-confirmation { border:1px solid #cce3d6; background:#f0f8f3; padding:24px; }
+#signature-dialog { border:0; border-radius:12px; box-shadow:0 18px 60px -16px #20213955; }
+#signature-dialog::backdrop { background:rgb(25 28 45 / 42%); }
+#client-completed-download { background:var(--blue); border-color:var(--blue); color:white; }
+.portal-complete.attention-panel { border-color:#cce3d6; background:#f0f8f3; }
+.portal-complete.attention-panel .portal-subtitle { color:#476755; }
+/* Access is the same product, before verification. */
+body[data-role] .login-card { min-height:540px; border:1px solid var(--line); border-radius:12px; box-shadow:none; }
+body[data-role] .welcome-panel { align-items:flex-start; justify-content:center; background:#efebff; padding:48px 42px; }
+body[data-role] .welcome-copy { margin:0; width:100%; text-align:left; }
+body[data-role] .welcome-copy h2 { color:var(--ink); font-size:34px; line-height:1.2; font-weight:650; letter-spacing:-.025em; }
+body[data-role] .welcome-copy p { color:#5f5680; max-width:34ch; font-size:14px; line-height:1.75; margin:18px 0 0; }
+.access-symbol { display:flex; align-items:center; justify-content:center; width:48px; height:48px; margin-bottom:28px; border:1px solid #d9d1f5; border-radius:12px; background:#f8f5ff; color:var(--blue); }
+.access-symbol svg { width:26px; height:26px; }
+.access-steps { display:grid; gap:15px; list-style:none; padding:0; margin:32px 0 0; counter-reset:access; font-size:12px; color:#51496d; }
+.access-steps li { display:flex; align-items:center; gap:12px; counter-increment:access; }
+.access-steps li::before { content:counter(access); display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; flex-shrink:0; border-radius:50%; color:#6550bf; background:#fff9; font-size:11px; }
+body[data-role] .form-panel { background:white; }
+body[data-role] .form-heading h1 { font-size:29px; font-weight:650; letter-spacing:-.025em; }
+body[data-role] .header-note { font-weight:400; color:var(--muted); }
+body[data-role] .site-footer { color:var(--muted); }
+body[data-role] .password-toggle { color:var(--muted); }
+body[data-role] .submit-button:hover { box-shadow:none; }
+/* A short arrival gives navigation continuity without delaying a task. */
+@keyframes product-arrival { from { opacity:.65; } to { opacity:1; } }
+.draft-main,.login-card { animation:product-arrival .16s ease-out; }
+@media(max-width:800px) { .draft-header { padding-inline:20px; gap:14px; flex-wrap:wrap; } .draft-header .brand { font-size:25px; } .draft-header .draft-back-link { font-size:12px; } .draft-main { padding-top:22px; } body[data-role] .welcome-panel { padding:26px; } body[data-role] .welcome-copy h2 { font-size:25px; } body[data-role] .welcome-copy p { font-size:12px; max-width:45ch; margin-top:12px; } .access-steps { display:none; } .access-symbol { width:36px; height:36px; margin-bottom:16px; } .access-symbol svg { width:21px; height:21px; } body[data-role] .login-card { min-height:0; } }
+@media(max-width:480px) { .draft-header .draft-back-link { order:3; flex-basis:100%; min-height:28px; } .draft-header .button { margin-left:auto; } .signing-field-rail { top:0; } }
+@media(prefers-reduced-motion:reduce) { .draft-main,.login-card { animation:none; } }
+
+body[data-role] .form-heading h1 { color:var(--ink); }
+.reference-ui .file-search > svg { margin:0; }
+.review-notice { background:transparent; border:0; }

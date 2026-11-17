@@ -6,8 +6,34 @@
 .review-viewport img { display: block; width: 100%; max-width: none; height: auto; }
 .review-controls button { min-height: 44px; }
 #review-page-label { font-variant-numeric: tabular-nums; }
-.signing-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr); align-items: start; gap: 28px; }
+.signing-layout { display: grid; grid-template-columns: 270px minmax(0, 1fr); grid-template-areas: "fields document"; align-items: start; gap: 20px 24px; }
+.signing-layout:has(.signing-helper-rail) { grid-template-areas: "fields helper" "fields document"; grid-template-rows: auto 1fr; }
+.signing-document { grid-area: document; }
+.signing-field-rail { grid-area: fields; min-width: 0; position: sticky; top: 84px; max-height: calc(100vh - 110px); overflow: auto; }
+.signing-helper-rail { grid-area: helper; min-width: 0; }
+.review-required-progress { font-variant-numeric: tabular-nums; }
 .signing-document, .signing-form { min-width: 0; }
+.signing-jump { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 24px; padding: 12px 0; margin: 12px 0; background: var(--canvas); }
+.signing-jump a { display: inline-flex; align-items: center; min-height: 44px; color: var(--blue); font-size: 14px; font-weight: 700; text-underline-offset: 3px; }
+#signing-form, #signing-document { scroll-margin-top: 88px; }
+.signing-recovery { margin-top: 20px; border-top: 1px solid var(--line); }
+.signing-recovery > summary, .agreement-assistant > summary { min-height: 44px; padding: 14px 0; color: var(--ink); font-size: 14px; font-weight: 700; cursor: pointer; }
+.agreement-assistant:not([open]) { padding-block: 8px; }
+.assistant-content { padding-top: 8px; }
+.signing-primary-actions > .button { min-height: 44px; }
+.agreement-assistant { min-width: 0; padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.agreement-assistant h2 { margin: 0 0 12px; font-size: 20px; }
+.agreement-assistant form { margin-top: 24px; }
+.agreement-assistant label { display: block; margin-bottom: 8px; font-size: 14px; line-height: 1.6; }
+.agreement-assistant textarea { display: block; width: 100%; min-height: 100px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font: inherit; resize: vertical; caret-color: var(--blue); }
+.agreement-assistant textarea:disabled { opacity: .6; }
+.agreement-assistant :focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+#assistant-answer { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 14px; line-height: 1.75; overflow-wrap: anywhere; }
+#assistant-answer p, #assistant-answer blockquote { white-space: pre-wrap; }
+#assistant-answer h3 { margin: 0 0 12px; font-size: 16px; }
+#assistant-answer details { margin: 12px 0 20px; }
+#assistant-answer summary { min-height: 44px; padding: 10px 0; color: var(--blue); cursor: pointer; }
+#assistant-answer blockquote { margin: 8px 0 16px; padding: 0; color: var(--ink); }
 .signing-form { padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .signing-form h2, .signing-confirmation h2 { margin: 0 0 12px; font-size: 20px; }
 .signing-form fieldset { min-width: 0; padding: 0; margin: 24px 0; border: 0; }
@@ -30,5 +56,49 @@
 .client-submitted-values h2 { font-size: 20px; }
 .client-submitted-values dt { margin-top: 20px; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .client-submitted-values dd { margin: 6px 0 0; font-size: 14px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
-@media (max-width: 850px) { .signing-layout { grid-template-columns: minmax(0, 1fr); } .review-viewport { max-height: 65vh; } }
-@media (max-width: 480px) { .signing-form { padding: 20px; } .signing-actions .button { flex: 1 1 100%; } }
+@media (max-width: 850px) { .review-viewport { max-height: 65vh; } }
+@media (max-width: 480px) { .signing-form { padding: 20px; } .signing-actions .button { flex: 1 1 100%; } .review-viewport { max-height: 48vh; } .signing-jump { gap: 16px; } .signing-form input, .signing-form textarea { font-size: 16px; } }
+.review-viewport { max-height: none; overflow: auto; padding: 12px; background: #e3eaf3; }
+.review-viewport .document-page { width: var(--document-zoom, 100%); }
+.review-controls { position: sticky; top: 68px; z-index: 3; padding: 10px 0; background: var(--canvas); }
+.review-controls input { width: 64px; min-height: 44px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--surface); font: inherit; }
+.review-field-marker { display: flex; align-items: center; text-align: left; padding: 2px 4px; cursor: pointer; font: inherit; font-size: 11px; color: #173b62; background: rgb(224 240 255 / 90%); border: 1px solid #3166b6; border-radius: 3px; }
+.review-field-marker[data-complete="true"] { background: #e3f3e9; border-color: #34734c; color: #163d24; }
+.review-field-marker:disabled { cursor: default; }
+.review-field-marker:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+.agreement-assistant form { margin-top: 14px; }
+.agreement-assistant textarea { min-height: 70px; }
+.agreement-assistant .assistant-content > .field-hint { margin: 8px 0; }
+.assistant-about { margin-top: 12px; }
+.assistant-about > summary { min-height: 32px; padding: 6px 0; font-size: 12px; color: var(--muted); cursor: pointer; }
+.signing-form [hidden] { display: none; }
+#signing-field-select { width: 100%; min-height: 44px; margin-top: 8px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--surface); font: inherit; font-size: 14px; }
+.signing-form > label[for="signing-field-select"] { display: block; margin-top: 20px; font-size: 13px; }
+#signature-dialog { width: min(520px, calc(100% - 32px)); max-height: calc(100vh - 48px); overflow: auto; padding: 28px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); }
+#signature-dialog::backdrop { background: rgb(16 34 52 / 45%); }
+#signature-dialog h2 { margin-top: 0; font-size: 22px; }
+#signature-dialog p { font-size: 14px; line-height: 1.7; }
+#signature-dialog label { display: block; font-size: 14px; margin-bottom: 8px; }
+#signature-name { width: 100%; min-height: 44px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--surface); font: inherit; }
+#signature-dialog :focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+@media (max-width: 850px) {
+  .signing-layout, .signing-layout:has(.signing-helper-rail) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "document" "fields"; }
+  .signing-layout:has(.signing-helper-rail) { grid-template-areas: "helper" "document" "fields"; grid-template-rows: auto auto auto; }
+  .signing-field-rail { position: static; max-height: none; overflow: visible; }
+  .review-viewport { max-height: none; }
+  .review-controls { position: sticky; top: 68px; }
+  #signature-name { font-size: 16px; }
+  .signing-form.is-editing { position: fixed; z-index: 8; inset: auto 12px 12px; max-height: 62dvh; overflow: auto; box-shadow: 0 8px 32px rgb(16 34 52 / 20%); }
+  .signing-form.is-editing #signing-editor-close { display: block; margin-bottom: 16px; }
+}
+@media (min-width: 1400px) {
+  #agreement-main { max-width: 1680px; }
+  .signing-layout:has(.signing-helper-rail) { grid-template-columns: 270px minmax(0, 1fr) 300px; grid-template-areas: "fields document helper"; grid-template-rows: auto; }
+  .signing-helper-rail { position: sticky; top: 84px; max-height: calc(100vh - 110px); overflow: auto; }
+}
+.signing-tools { margin-top: 18px; border-top: 1px solid var(--line); }
+.signing-tools > summary { min-height: 44px; padding: 12px 0; color: var(--ink); font-size: 13px; cursor: pointer; }
+.signing-tools > label { display: block; margin-top: 8px; font-size: 13px; }
+.signing-tools > button { margin-top: 12px; }
+.signing-save-state[data-dirty="true"] { color: var(--ink); font-weight: 700; }
+.signing-form :is(input, textarea, button, select) { scroll-margin-block: 100px 24px; }
