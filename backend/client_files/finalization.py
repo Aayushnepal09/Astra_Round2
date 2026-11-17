@@ -14,6 +14,7 @@ from agreements.processing import DocumentError, PdfProcessor
 from agreements.storage import PrivateDocumentStorage
 from .models import ClientFile, SigningCompletion, SigningRequest
 from .submissions import ClientSigning, CONSENT_TEXT, SigningError
+from .preparation import PreparationValues
 
 
 class AgreementFinalizer:
@@ -91,6 +92,7 @@ class AgreementFinalizer:
                 if source.sha256 != version.pdf_sha256 or source.size_bytes != version.agreement.pdf_size_bytes:
                     raise SigningError("The published source PDF does not match the issued agreement.", status=409)
                 values = {key: value for submission in submissions for key, value in submission.values.items()}
+                values.update(PreparationValues.validate(version, issued.preparation_values, complete=True))
                 fields = [{**field, "value": values[field["id"]]} for field in version.fields]
                 try:
                     artifact = storage.inspect(completion.pdf_key, max_bytes=settings.AGREEMENT_MAX_BYTES)
@@ -137,6 +139,7 @@ class AgreementFinalizer:
             "schemaVersion": 1, "requestId": str(issued.pk), "clientFileId": str(issued.client_file_id),
             "templateVersionId": str(issued.template_version_id), "templateVersionNumber": issued.template_version.number,
             "sourcePdfSha256": issued.template_version.pdf_sha256,
+            "preparationValues": dict(issued.preparation_values),
             "completedPdfSha256": completion.pdf_sha256, "pageCount": completion.page_count,
             "signers": [{
                 "role": s.recipient.role, "name": s.recipient.name, "email": s.recipient.email,

@@ -101,6 +101,8 @@ class ClientSigning:
         if version.pdf_sha256 != agreement.pdf_sha256:
             raise SigningError("The issued source PDF does not match this agreement. Contact the company; your entries are still here.", status=409)
         combined = dict(values)
+        from .preparation import PreparationValues
+        combined.update(PreparationValues.validate(version, issued.preparation_values, complete=True))
         if recipient.role == "company":
             client = SigningSubmission.objects.get(signing_request=issued, recipient__role="client")
             client.full_clean()

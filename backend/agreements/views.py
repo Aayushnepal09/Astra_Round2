@@ -55,6 +55,7 @@ def version_data(version, *, preview=False):
     data = {
         "id": str(version.pk), "name": version.name, "number": version.number,
         "roles": version.roles, "publishedAt": version.published_at.isoformat(),
+        "preparationFields": [field for field in version.fields if field["role"] == "preparation"],
         "previewUrl": f'{reverse("company_dashboard")}#templates/published/{version.pk}',
     }
     if preview:

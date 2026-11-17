@@ -1,8 +1,10 @@
+import json
 import uuid
 
 from django.core.exceptions import RequestDataTooBig, SuspiciousFileOperation, ValidationError
 from django.db import DatabaseError, IntegrityError, transaction
 from django.http import FileResponse, HttpResponseNotFound, JsonResponse
+from django.http.request import UnreadablePostError
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views import View
@@ -76,9 +78,16 @@ class CompanyFileEditor(CompanyFileAccessMixin, View):
 
     def post(self, request, file_id=None):
         try:
-            data = read_json(request)
-        except ValueError as error:
-            return auth_error(str(error))
+            if request.content_type != "application/json":
+                raise ValueError("Send the draft as JSON.")
+            raw = request.read(256 * 1024 + 1)
+            if len(raw) > 256 * 1024:
+                return auth_error("The draft exceeds 256 KiB. Shorten its values and retry.", status=413)
+            data = json.loads(raw)
+            if not isinstance(data, dict):
+                raise ValueError("Send the draft as a JSON object.")
+        except (ValueError, UnicodeDecodeError, RequestDataTooBig, UnreadablePostError):
+            return auth_error("Send a valid JSON draft of at most 256 KiB.")
         if data.pop("workspace_id", None) != str(request.user.pk):
             return JsonResponse({
                 "error": "The signed-in workspace has changed. Reload this page before saving.",
@@ -87,8 +96,11 @@ class CompanyFileEditor(CompanyFileAccessMixin, View):
         allowed = set(ClientFileDraftForm.Meta.fields)
         if self.is_new:
             allowed.add("creation_key")
-        if set(data) - allowed or any(not isinstance(value, str) for value in data.values()):
+        if (set(data) - allowed
+                or not isinstance(data.get("preparation_values", {}), dict)
+                or any(not isinstance(value, str) for key, value in data.items() if key != "preparation_values")):
             return auth_error("Send only the supported draft fields as text.")
+        data.setdefault("preparation_values", {})
         creation_key = None
         if self.is_new:
             try:

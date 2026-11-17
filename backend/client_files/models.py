@@ -80,6 +80,9 @@ class ClientFile(models.Model):
         super().clean()
         if self.template_version_id and self.template_version.agreement.company_id != self.company_id:
             raise ValidationError({"template_version": "Choose a published version from this workspace."})
+        from .preparation import PreparationValues
+        PreparationValues.validate(self.template_version if self.template_version_id else None,
+                                   self.preparation_values, complete=False)
         if self.status == self.Status.COMPLETED and not SigningCompletion.objects.filter(
                 signing_request__client_file_id=self.pk, completed_at__isnull=False).exists():
             raise ValidationError("Save the completed PDF and signing history before marking this file ready.")
@@ -97,6 +100,11 @@ class ClientFile(models.Model):
                 missing.append("Add the company countersigner's name.")
             if not self.company_signer_email:
                 missing.append("Add the company countersigner's email.")
+        from .preparation import PreparationValues
+        try:
+            PreparationValues.validate(self.template_version, self.preparation_values, complete=True)
+        except ValidationError as error:
+            missing.extend(error.messages)
         return missing
 
     def save(self, *args, **kwargs):
@@ -122,6 +130,8 @@ class SigningRequest(models.Model):
         if (self.client_file.company_id != self.template_version.agreement.company_id
                 or self.client_file.template_version_id != self.template_version_id):
             raise ValidationError("Requests must use the client file's published version in its own workspace.")
+        from .preparation import PreparationValues
+        PreparationValues.validate(self.template_version, self.preparation_values, complete=True)
 
     def save(self, *args, **kwargs):
         if not self._state.adding:

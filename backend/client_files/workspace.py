@@ -57,10 +57,12 @@ class CompanyFileWorkspace:
             "selectedTemplate": {
                 "id": str(version.pk), "name": version.name, "number": version.number,
                 "roles": version.roles,
+                "preparationFields": [field for field in version.fields if field["role"] == "preparation"],
                 "previewUrl": f'{reverse("company_dashboard")}#templates/published/{version.pk}',
             } if version else None,
             "companySignerName": file.company_signer_name,
             "companySignerEmail": file.company_signer_email,
+            "preparationValues": file.preparation_values,
             "setupIssues": file.setup_issues(),
             "updatedAt": file.updated_at.isoformat() if saved else None,
             "detailUrl": reverse("company_file_detail", args=[file.pk]) if saved else None,

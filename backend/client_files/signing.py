@@ -13,6 +13,8 @@ from django.utils import timezone
 from django.utils.crypto import salted_hmac
 
 from agreements.storage import PrivateDocumentStorage
+from agreements.processing import DocumentError, PdfProcessor
+from .preparation import PreparationValues
 from login.client_throttle import ClientAccessThrottle
 from login.models import ClientInvitation
 from .models import ClientFile, SigningAccess, SigningRecipient, SigningRequest
@@ -80,6 +82,7 @@ class DemoRequestIssuer:
             raise ValidationError("Select a published template version before sending.")
         version = file.template_version
         version.full_clean()
+        preparation_values = PreparationValues.validate(version, file.preparation_values, complete=True)
         issues = file.setup_issues()
         if issues:
             raise ValidationError(issues)
@@ -95,7 +98,19 @@ class DemoRequestIssuer:
                 digest.update(chunk)
         if size != agreement.pdf_size_bytes or digest.hexdigest() != version.pdf_sha256:
             raise ValidationError("The published PDF no longer matches its validated identity. Prepare a new agreement.")
-        issued = SigningRequest.objects.create(client_file=file, template_version=version)
+        prepared_fields = [{**field, "value": preparation_values[field["id"]]}
+                           for field in PreparationValues.fields(version)]
+        if prepared_fields:
+            try:
+                with storage.open(agreement.pdf_key) as source:
+                    PdfProcessor().complete(source.name, prepared_fields)
+            except DocumentError as error:
+                raise ValidationError({"preparation_values":
+                    "Company preparation could not be rendered. Check field sizes and entered characters, "
+                    "then retry. No request was issued. " + str(error)
+                }) from error
+        issued = SigningRequest.objects.create(client_file=file, template_version=version,
+                                               preparation_values=preparation_values)
         for role in version.roles:
             prefix = "signer" if role == "client" else "company_signer"
             recipient = SigningRecipient.objects.create(
@@ -161,6 +176,14 @@ class DemoRequestIssuer:
             company_url = reverse("company_agreement", args=[issued.client_file_id])
         return {
             "requestId": str(issued.pk), "templateVersionId": str(issued.template_version_id),
+            "recipient": {"name": recipient.name, "email": recipient.email},
+            "preparationValues": dict(issued.preparation_values),
+            "selectedTemplate": {
+                "id": str(issued.template_version_id), "name": issued.template_version.name,
+                "number": issued.template_version.number, "roles": issued.template_version.roles,
+                "preparationFields": PreparationValues.fields(issued.template_version),
+                "previewUrl": f'{reverse("company_dashboard")}#templates/published/{issued.template_version_id}',
+            },
             "invitationId": str(invitation.pk), "state": state,
             "progress": progress,
             "companySigningUrl": company_url,
