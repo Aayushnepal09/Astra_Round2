@@ -8,7 +8,7 @@ from local_config import groq_api_key
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / ".local"
+DATA_DIR = Path(os.environ.get("DJANGO_DATA_DIR", BASE_DIR / ".local"))
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
@@ -23,10 +23,18 @@ if not SECRET_KEY:
         pass
     SECRET_KEY = secret_file.read_text().strip()
 
-ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
+ALLOWED_HOSTS = [host.strip() for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if host.strip()]
+BEHIND_PROXY = os.environ.get("DJANGO_BEHIND_PROXY", "0") == "1"
+if not DEBUG:
+    if not DATA_DIR.is_absolute():
+        raise ImproperlyConfigured("DJANGO_DATA_DIR must be an absolute persistent path.")
+    if not os.environ.get("DJANGO_ALLOWED_HOSTS") or not ALLOWED_HOSTS or "*" in ALLOWED_HOSTS:
+        raise ImproperlyConfigured("Set explicit DJANGO_ALLOWED_HOSTS before deployment.")
 ROOT_URLCONF = "urls"
+WSGI_APPLICATION = "wsgi.application"
 INSTALLED_APPS = ["django.contrib.auth", "django.contrib.contenttypes", "django.contrib.sessions", "django.contrib.staticfiles", "login", "client_files", "agreements"]
 MIDDLEWARE = [
+    "proxy.TrustedProxyMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "login.middleware.RoleSessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -61,7 +69,7 @@ else:
 TEMPLATES = [{"BACKEND": "django.template.backends.django.DjangoTemplates", "DIRS": [BASE_DIR.parent / "frontend"], "APP_DIRS": False}]
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR.parent / "frontend"]
-STATIC_ROOT = DATA_DIR / "static"
+STATIC_ROOT = Path(os.environ.get("DJANGO_STATIC_ROOT", DATA_DIR / "static"))
 # Private documents are never served through Django's static/media URL handling.
 AGREEMENT_STORAGE_ROOT = Path(os.environ.get("DJANGO_AGREEMENT_STORAGE_ROOT", DATA_DIR / "agreements"))
 AGREEMENT_MAX_BYTES = 10 * 1024 * 1024
