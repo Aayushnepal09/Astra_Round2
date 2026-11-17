@@ -1,0 +1,23 @@
+# Replace the reserved placeholder with the real DNS name before installation.
+astra.example.invalid {
+    encode zstd gzip
+    request_body {
+        # Includes multipart overhead; Django retains its 10 MiB document limit.
+        max_size 12MiB
+    }
+    handle_path /static/* {
+        root * /var/www/astra/static
+        file_server
+    }
+    handle {
+        reverse_proxy 127.0.0.1:8000 {
+            header_up X-Astra-Client-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up -Forwarded
+            transport http {
+                response_header_timeout 160s
+            }
+        }
+    }
+}

@@ -1,0 +1,29 @@
+[Unit]
+Description=Astra Django application
+After=network.target postgresql.service docker.service
+Requires=postgresql.service docker.service
+
+[Service]
+Type=simple
+User=astra
+Group=astra
+SupplementaryGroups=docker
+WorkingDirectory=/opt/astra/app/backend
+EnvironmentFile=/etc/astra/astra.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/astra/venv/bin/gunicorn --config /opt/astra/app/deploy/gunicorn.conf.py wsgi:application
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=170
+KillMode=mixed
+UMask=0077
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/astra
+MemoryMax=3G
+TasksMax=256
+
+[Install]
+WantedBy=multi-user.target
