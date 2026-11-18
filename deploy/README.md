@@ -2,8 +2,8 @@
 
 Prepared configuration for one Ubuntu 24.04 Arm64 or x86-64 VM, PostgreSQL on
 localhost, Caddy HTTPS, Gunicorn, and the existing isolated DOCX/PDF processing.
-Oracle Always Free and an unupgraded Google Cloud Free Trial are supported hosting
-arrangements. Nothing in this folder creates cloud resources or upgrades a cloud
+The evaluation runs on an unupgraded Google Cloud Free Trial. Nothing in this
+folder creates cloud resources or upgrades a cloud
 or AI account. Live deployment state is maintained separately from these installation instructions.
 
 ## Local release preparation
@@ -29,18 +29,14 @@ that can prove every possible credential absent.
 
 ## Server prerequisites
 
-- Use an unupgraded Free Tier account and Always Free resources in the home region.
-  Confirm existing boot/block volumes plus the new volume remain within the free
-  allocation. Trial credits and paid fallback are not part of this setup.
-- Alternatively, use the explicitly agreed Google Cloud Free Trial with available
+- Use the explicitly agreed Google Cloud Free Trial with available
   trial credit and no paid-account upgrade. The VM, disk, IPv4 address and network
   traffic consume that credit; billing alerts are not a spending cap. A required
   verification prepayment is handled separately under Google's refund conditions.
-- The prepared VCN needs its enabled internet gateway, `0.0.0.0/0` route, and
-  regional public subnet. Assign the instance a public IPv4 address.
+- Use a Google Cloud VPC/subnet with internet routing and an external IPv4 address.
 - Restrict ingress TCP 22 to the administrator's public IP (`/32` for IPv4).
   Permit ingress TCP 80 and 443 publicly. Keep 8000, 5432, Docker and Caddy's admin
-  API closed publicly, in both OCI security rules and the host firewall.
+  API closed publicly, in both Google Cloud firewall rules and the host firewall.
 - A real DNS hostname must point directly to the VM; a free DuckDNS subdomain is
   suitable. An IP-based sslip.io hostname can also be used without creating an
   account. That hostname changes if the VM's external address changes. Do not put
@@ -138,8 +134,8 @@ Gunicorn binds only to `127.0.0.1:8000`, with two synchronous workers and a
 in this pool; a long operation can delay other requests. It does not introduce a
 paid queue or simulate background success. PDF/DOCX process limits remain intact.
 Systemd's 3 GB application limit covers application children, not Docker-managed
-containers, which retain their separate limits. Suitability for 1 OCPU / 6 GB is
-subject to verification on the target host.
+containers, which retain their separate limits. The current evaluation VM has
+2 vCPUs and 8 GB RAM; document throughput is not established by service health.
 
 `DJANGO_BEHIND_PROXY=1` requires loopback requests with a valid client IP and HTTPS
 metadata. Caddy overwrites that metadata using the connected client address.
@@ -186,13 +182,14 @@ files. Recovery has not been exercised during deferred testing.
 
 For the end of the 7–10-day demo: take and download the private snapshot first.
 Stop Astra/Caddy and the VM. Permanent removal of the instance, retained volumes,
-backups, DNS and other resources is a separate explicit action. Free-tier
-capacity and idle reclamation can affect availability during the demo; these
-files do not guarantee uptime or arrange an automatic shutdown.
+backups, DNS and other resources is a separate explicit action. Keep the account
+in Free Trial mode and monitor remaining credit. An external IP change also
+requires updating an IP-based hostname. These files do not guarantee uptime or
+arrange an automatic shutdown.
 
 ## Official references
 
-- [Oracle Always Free resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm)
+- [Google Cloud Free Trial](https://docs.cloud.google.com/free/docs/free-cloud-features)
 - [Gunicorn settings](https://gunicorn.org/reference/settings/)
 - [Caddy proxy headers](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy)
 - [Caddy installation](https://caddyserver.com/docs/install)

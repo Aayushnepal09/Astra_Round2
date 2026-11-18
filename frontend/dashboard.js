@@ -1,13 +1,13 @@
 import { SessionClient } from './shared/ui.js';
 import { AgreementWorkspace } from './agreements.js?v=ui22';
-import { ClientDirectory } from './client_workspace.js?v=login1';
+import { ClientDirectory } from './client_workspace.js?v=ui26';
 
 class WorkspaceDashboard {
   static views = new Map([
     ['overview', { title: 'Overview', description: 'Agreements that need your attention, from preparation to completion.', label: 'Overview' }],
     ['files', { title: 'Clients & agreements', description: 'Every client, job and agreement in one place.', label: 'Clients' }],
     ['templates', { title: 'Agreement templates', description: 'Prepare a document once. Reuse its ready version for the next client.', label: 'Agreement templates' }],
-    ['help', { title: 'Help & guidance', description: 'How preparation, signing and demo delivery work.', label: 'Help & guidance' }],
+    ['help', { title: 'Help & guidance', description: 'How preparation, signing and invitations work.', label: 'Help & guidance' }],
   ]);
 
   static statuses = new Map([

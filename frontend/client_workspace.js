@@ -1,5 +1,5 @@
 import { SessionClient, SessionError } from './shared/ui.js';
-import { AgreementTable, SigningActions } from './agreement_table.js?v=countersign1';
+import { AgreementTable, SigningActions } from './agreement_table.js?v=ui26';
 
 const node = (tag, text = '', className = '') => {
   const element = document.createElement(tag);

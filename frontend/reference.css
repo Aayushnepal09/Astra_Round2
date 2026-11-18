@@ -7,8 +7,6 @@
 .reference-ui .button.secondary { background:#fff; color:var(--ink); border-color:var(--line); }
 .reference-ui .sidebar { width:232px; padding:28px 16px 18px; background:white; }
 .reference-ui .sidebar .brand { font-size:29px; letter-spacing:-.025em; gap:0; color:var(--ink); }
-.reference-logo { display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; border-radius:9px; background:var(--blue); color:white; }
-.reference-logo svg { width:20px; height:20px; }
 .reference-ui .workspace-shell { margin-left:232px; }
 .reference-ui .workspace-header { min-height:76px; padding:16px 36px; }
 .reference-ui .workspace-main { max-width:1440px; padding:26px 36px 36px; }
@@ -22,8 +20,6 @@
 .reference-ui .page-heading { margin:24px 0 28px; align-items:center; }
 .reference-ui .page-heading h1 { font-size:29px; line-height:1.25; letter-spacing:-.025em; font-weight:650; }
 .reference-ui .page-heading p { margin-top:10px; color:var(--muted); }
-.reference-ui .reference-demo { background:#e7effd; color:var(--blue-hover); padding:10px 16px; margin:0 0 26px; border-radius:8px; font-size:12px; }
-.reference-ui .page-heading:has(+ .reference-demo) { margin-top:8px; }
 .reference-ui .reference-create { margin-left:auto; white-space:nowrap; }
 .reference-metrics { gap:24px; margin:0 0 28px; }
 .reference-ui .metric { border:0; box-shadow:none; background:white; padding:18px 20px; border-radius:10px; text-align:left; }

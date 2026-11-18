@@ -412,7 +412,7 @@ class SigningController {
     this.status.textContent = this.state.role === 'company'
       ? 'Company access is unavailable. Your entries remain in this tab. Sign in to this workspace in a new tab, then check submission status here.'
       : this.state.receipt
-      ? 'Access expired. Ask the company for a replacement link and code from its demo panel. Verify the replacement link in a new tab, then check status here. Your recorded signature is preserved.'
+      ? 'Access expired. Ask the company for a new link and access code. Verify the replacement link in a new tab, then check status here. Your recorded signature is preserved.'
       : 'Access expired. Your entries remain in this tab. Ask the company for a replacement link and code, verify in a new tab, then check status here.';
     this.update();
   }

@@ -1,12 +1,12 @@
 {% extends "shared/base.html" %}
 {% block title %}Your workspace · Astra{% endblock %}
 {% block resources %}
-  <link rel="stylesheet" href="{{ static_prefix }}dashboard.css?v=ui24">
-  <link rel="stylesheet" href="{{ static_prefix }}agreements.css?v=ui24">
-  <link rel="stylesheet" href="{{ static_prefix }}shared/scroll_document.css?v=ui24">
-  <script type="module" src="{{ static_prefix }}dashboard.js?v=ui22"></script>
-  <link rel="stylesheet" href="{{ static_prefix }}workflow.css?v=ui24">
-  <link rel="stylesheet" href="{{ static_prefix }}reference.css?v=ui24">
+  <link rel="stylesheet" href="{{ static_prefix }}dashboard.css?v=ui26">
+  <link rel="stylesheet" href="{{ static_prefix }}agreements.css?v=ui26">
+  <link rel="stylesheet" href="{{ static_prefix }}shared/scroll_document.css?v=ui26">
+  <script type="module" src="{{ static_prefix }}dashboard.js?v=ui26"></script>
+  <link rel="stylesheet" href="{{ static_prefix }}workflow.css?v=ui26">
+  <link rel="stylesheet" href="{{ static_prefix }}reference.css?v=ui26">
 {% endblock %}
 {% block body_attributes %}class="dashboard reference-ui" data-logout-url="{{ logout_url }}" data-login-url="{{ login_url }}" data-files-url="{{ files_url }}" data-agreements-url="{{ agreements_url }}" data-company-id="{{ company_id }}" data-clients-url="{{ clients_url }}" data-templates-url="{{ templates_url }}" data-upload-job="{{ upload_job.id }}" data-job-add-url="{{ job_add_url }}"{% endblock %}
 {% block content %}
@@ -27,7 +27,6 @@
         <a class="nav-link" href="#templates" data-view="templates"><svg class="icon" aria-hidden="true"><use href="#icon-document"/></svg>Agreement templates</a>
       </nav>
       <div class="sidebar-bottom">
-        <div class="sidebar-note"><strong>Demo delivery</strong><p>Share a signing link and access code. No email is sent.</p></div>
         <a class="nav-link" href="#help" data-view="help"><svg class="icon" aria-hidden="true"><use href="#icon-help"/></svg>Help & guidance</a>
         <span class="workspace-private"><svg class="icon" aria-hidden="true"><use href="#icon-shield"/></svg>Your company workspace</span>
       </div>
@@ -45,13 +44,12 @@
 
     <main class="workspace-main" id="workspace-main" tabindex="-1">
       <noscript><p class="workspace-alert">Enable JavaScript to switch workspace views and use account actions.</p></noscript>
-      <p class="reference-demo">Demo delivery · Invitations use signing links and access codes. No email is sent.</p>
       <div class="page-heading"><div><h1 id="page-title">Your workspace, a little simpler.</h1><p id="page-description">A clear view of your client files, from first agreement to ready to start.</p></div><button class="button reference-create" id="new-client-toggle" type="button" hidden><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg>New client</button><a class="button secondary heading-action" href="#files" data-view="files"><svg class="icon" aria-hidden="true"><use href="#icon-folder"/></svg>View clients</a></div>
       <div class="workspace-alert" id="workspace-error" role="alert" hidden><div><strong>We couldn’t refresh your workspace.</strong><p id="workspace-error-message"></p></div><button class="button secondary" type="button" id="retry-session">Try again</button></div>
       <p class="sr-only" id="workspace-status" role="status" aria-live="polite"></p>
 
       <section class="workspace-view" id="view-overview" aria-label="Overview">
-        <section class="setup-banner original-welcome" aria-labelledby="setup-title">
+        <section class="setup-banner" aria-labelledby="setup-title">
           <div class="setup-copy"><h2 id="setup-title">A good beginning.<br>A reusable agreement.</h2><p id="setup-copy">Bring the agreement you already use. Prepare it once, then make every new client file a little easier.</p><a class="button" id="setup-action" href="#templates" data-view="templates"><span id="setup-action-label">Set up an agreement</span><svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></a><span class="setup-footnote">Your document. Your fields. Ready to reuse.</span></div>
           <img src="{{ static_prefix }}shared/assets/welcome.png" class="setup-art" alt="" width="1254" height="1254">
         </section>
@@ -148,7 +146,7 @@
         </section>
       </section>
       <section class="workspace-view" id="view-help" aria-label="Help and guidance" hidden>
-        <section class="panel guidance"><h2>A little guidance goes a long way.</h2><p>Here’s how an agreement moves through your workspace.</p><details open><summary>What is a client file?</summary><p>A client file represents one job or case for one client. It sits under a saved client and contains one or more agreements. Each agreement has its own signing request, status and final records.</p></details><details><summary>How do agreement templates work?</summary><p>Upload the agreement your company uses, review every page, place fields, and assign signer roles. Once a version is published, it can be reused. Editing a template does not change an agreement already issued.</p></details><details><summary>Does creating a file send the agreement?</summary><p>No. Confirm the document, signer details, and company values first. A separate <strong>Send request — Demo</strong> action creates the request after those checks pass.</p></details><details><summary>How do demo invitations work?</summary><p>No email is sent. The company view shows the signing link, access code, expiry countdown, and Open/Copy controls below the send button. The client must verify the code before viewing the agreement.</p></details><details><summary>When is a file ready to start?</summary><p>The client signs first. If required, the company countersigns next. Each agreement completes after its required signatures, PDF and history are saved. A job is ready to start when all of its agreements are completed.</p></details><details><summary>What can I use now?</summary><p>Prepare PDF or DOCX templates, save client files, and issue demo signing requests. Clients sign first; companies countersign when required. Download completed documents, or cancel an unfinished request and explicitly prepare a replacement. Earlier signing records stay in the file’s history.</p></details><details><summary>Need help with your account?</summary><p>Ask your company administrator for help with access or a password reset.</p></details></section>
+        <section class="panel guidance"><h2>A little guidance goes a long way.</h2><p>Here’s how an agreement moves through your workspace.</p><details open><summary>What is a client file?</summary><p>A client file represents one job or case for one client. It sits under a saved client and contains one or more agreements. Each agreement has its own signing request, status and final records.</p></details><details><summary>How do agreement templates work?</summary><p>Upload the agreement your company uses, review every page, place fields, and assign signer roles. Once a version is published, it can be reused. Editing a template does not change an agreement already issued.</p></details><details><summary>Does creating a file send the agreement?</summary><p>No. Confirm the document, signer details, and company values first. A separate <strong>Send to client</strong> action sends it after those checks pass.</p></details><details><summary>How do client invitations work?</summary><p>Sending an agreement creates a private signing link and an access code for the client. Both work for 24 hours and can be used more than once in that time. In this demo they open in a pop-up for you to share, instead of being emailed. The client must enter the code before viewing the agreement.</p></details><details><summary>When is a file ready to start?</summary><p>The client signs first. If required, the company countersigns next. Each agreement completes after its required signatures, PDF and history are saved. A job is ready to start when all of its agreements are completed.</p></details><details><summary>What can I use now?</summary><p>Prepare PDF or DOCX templates, save client files, and send signing invitations. Clients sign first; companies countersign when required. Download completed documents, or cancel an unfinished request and explicitly prepare a replacement. Earlier signing records stay in the file’s history.</p></details><details><summary>Need help with your account?</summary><p>Ask your company administrator for help with access or a password reset.</p></details></section>
       </section>
       <footer class="workspace-footer"><span>Less paperwork. More possibilities.</span><span>Astra agreement portal</span></footer>
     </main>

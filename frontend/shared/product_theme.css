@@ -5,8 +5,6 @@ body { color:var(--ink); background:var(--canvas); }
 input,textarea { caret-color:var(--blue); }
 input[type=checkbox],input[type=radio],progress { accent-color:var(--blue); }
 .brand { gap:0; font-family:inherit; font-size:29px; font-weight:650; letter-spacing:-.025em; }
-.reference-logo { display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; width:30px; height:30px; border-radius:9px; background:var(--blue); color:#fff; }
-.brand .reference-logo svg { width:20px; height:20px; margin:0; stroke-width:2; }
 body:not(.reference-ui) .button { border-radius:7px; font-weight:600; box-shadow:none; transition:background .15s ease,border-color .15s ease; }
 body:not(.reference-ui) .button:not(.secondary):not(.danger):not(:disabled) { background:var(--blue); border-color:var(--blue); color:white; }
 body:not(.reference-ui) .button:not(.secondary):not(.danger):not(:disabled):hover { background:var(--blue-hover); }

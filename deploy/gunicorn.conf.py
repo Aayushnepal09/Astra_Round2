@@ -1,4 +1,4 @@
-"""Small, bounded process pool for the Oracle evaluation VM."""
+"""Small, bounded process pool for the evaluation VM."""
 
 bind = "127.0.0.1:8000"
 workers = 2

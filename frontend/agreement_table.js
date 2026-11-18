@@ -43,7 +43,7 @@ export class SigningActions {
   }
 
   async send(file, table) {
-    if (!await this.confirm('Send this agreement?', `${file.templateName || file.title} will be issued to ${file.signerName} (${file.signerEmail}). Its version and prepared values will be fixed. Demo mode creates a signing link and code; no email is sent.`, 'Send request')) return;
+    if (!await this.confirm('Send this agreement?', `${file.templateName || file.title} will be issued to ${file.signerName} (${file.signerEmail}). Its version and prepared values will be fixed. The client receives a private signing link and access code.`, 'Send request')) return;
     return table.run('Issuing the signing request…', async () => {
       const result = await this.request(file.requestUrl, { templateVersionId: file.templateVersionId, updatedAt: file.updatedAt, replacesRequestId: file.replacesRequestId });
       await table.refresh(true);

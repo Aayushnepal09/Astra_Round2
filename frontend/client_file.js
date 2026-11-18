@@ -62,6 +62,8 @@ class ClientFileEditor {
     document.querySelector('#demo-replace').addEventListener('click', () => this.requestInvitation(true));
     document.querySelector('#demo-refresh').addEventListener('click', () => this.loadInvitation());
     for (const kind of ['link', 'code', 'all']) document.querySelector(`#demo-copy-${kind}`).addEventListener('click', () => this.copyInvitation(kind));
+    document.querySelector('#invitation-open').addEventListener('click', () => this.showInvitation());
+    document.querySelector('#invitation-close').addEventListener('click', () => document.querySelector('#invitation-dialog').close());
     setInterval(() => this.renderCountdown(), 1000);
     const refreshIssuedStatus = () => {
       if (!document.hidden && this.sessionReady && !this.checkingSession && !this.requestBusy && !this.saving && !this.dirty
@@ -193,7 +195,7 @@ class ClientFileEditor {
     this.cancelButton.disabled = busy || !this.sessionReady;
     this.prepareButton.disabled = busy || !this.sessionReady || this.cancellationPending;
     this.cancelButton.textContent = this.requestBusy && this.cancellationPending ? 'Cancellation pending…' : 'Cancel request';
-    this.sendButton.textContent = this.requestBusy ? 'Checking request…' : this.saving ? 'Saving…' : this.dirty ? 'Save & send request — Demo' : 'Send request — Demo';
+    this.sendButton.textContent = this.requestBusy ? 'Checking request…' : this.saving ? 'Saving…' : this.dirty ? 'Save & send to client' : 'Send to client';
     this.sendButton.setAttribute('aria-busy', String(this.requestBusy));
     document.querySelector('#demo-replace').disabled = busy || !this.sessionReady || !this.canReplaceCode();
     document.querySelector('#demo-refresh').disabled = busy || !this.sessionReady;
@@ -211,8 +213,8 @@ class ClientFileEditor {
         : this.isNew
         ? 'Save this new file first. Then review the selected version, recipients and company values before issuing.'
         : this.dirty
-        ? 'Your changes are saved first, then the request is issued. Demo mode provides a link and code; no email is sent.'
-        : 'Setup saved. Review the details above, then issue the request. Demo mode provides a link and code; no email is sent.';
+        ? 'Your changes are saved first, then the invitation is sent to the client.'
+        : 'Setup saved. Review the details above, then send the invitation to the client.';
     }
     const needsGuard = !this.allowLeave && (this.dirty || this.saving);
     if (needsGuard === this.guardingLeave) return;
@@ -261,7 +263,7 @@ class ClientFileEditor {
   canReplaceCode() {
     const invitation = this.invitation;
     return Boolean(!this.cancellationPending && invitation?.invitationId && invitation.accessAvailable && invitation.canReplace
-      && ['expired', 'locked', 'verified'].includes(invitation.state)
+      && ['expired', 'locked'].includes(invitation.state)
       && (invitation.progress === 'awaiting_client' || invitation.readOnly));
   }
 
@@ -281,7 +283,7 @@ class ClientFileEditor {
       ? 'The saved request state changed. Load the latest saved details before continuing. Your local entries are still here.'
       : file.status === 'cancelled' ? 'Request cancelled. Further signing has stopped; existing signing records are retained.'
       : file.status === 'expired' ? 'Signing deadline passed. Prepare a replacement to collect fresh signatures. Earlier signing records are retained.'
-      : file.replacesRequestId ? 'Replacement draft. Review the template, recipients and company-prepared values, save your setup, then select Send request — Demo. Earlier signatures and consent are not reused.' : '';
+      : file.replacesRequestId ? 'Replacement draft. Review the template, recipients and company-prepared values, save your setup, then select Send to client. Earlier signatures and consent are not reused.' : '';
     if (['cancelled', 'expired'].includes(file.status)) this.issued = true;
     this.renderStage(file.status);
   }
@@ -305,7 +307,7 @@ class ClientFileEditor {
   renderStage(status) {
     const copy = {
       draft: ['Review & issue', 'Review the template, recipients and company-prepared values. Save your setup before sending.', 'Saving setup does not issue a request. Sending freezes the selected version and recipients.'],
-      awaiting_client: ['Awaiting the client', 'The request is issued. Share the demo link and code below so the client can review and sign.', 'Issued details are fixed. Cancel an unfinished request before preparing corrected setup.'],
+      awaiting_client: ['Awaiting the client', 'The client has been invited to review and sign. Use View invitation link & code to share access again.', 'Issued details are fixed. Cancel an unfinished request before preparing corrected setup.'],
       awaiting_company: ['Your company signature is needed', 'The client’s signature is recorded. Review the agreement and complete the company countersignature.', 'The existing client signature is preserved if this request is cancelled. A replacement requires fresh signatures.'],
       finalizing: ['Save the final records', 'All required signatures are recorded. Generate the completed PDF and signing history to finish this file.', 'If processing fails, retry finalization. No new signatures are needed.'],
       completed: ['Completed documents', 'The completed PDF and signing history are ready. Open or download the final records below.', 'This completed request is read-only. Its documents and signing history are retained.'],
@@ -322,7 +324,6 @@ class ClientFileEditor {
     // A saved, complete draft starts collapsed behind the summary card; anything unfinished stays open.
     document.querySelector('#draft-setup-details').open = (status === 'draft' && !(this.setupReady && !this.isNew)) || this.recoveryRequired || this.dirty;
     document.querySelector('#demo-send-hint').textContent = status === 'draft' ? copy[2] : '';
-    document.querySelector('#demo-disclosure').hidden = ['completed', 'finalizing', 'cancelled', 'expired'].includes(status);
     this.sendButton.hidden = status !== 'draft';
     this.button.hidden = status !== 'draft';
   }
@@ -740,8 +741,10 @@ class ClientFileEditor {
     }
     if (!invitation) return;
     this.renderStage(invitation.progress);
+    document.querySelector('#invitation-open').textContent = invitation.readOnly ? 'View client access link & code' : 'View invitation link & code';
     if (this.renderedRequestId !== invitation.requestId) {
-      document.querySelector('#demo-invitation').open = invitation.progress === 'awaiting_client';
+      // A freshly sent invitation opens straight away; reloads keep it one click away.
+      if (issuedHere && invitation.progress === 'awaiting_client') this.showInvitation();
       this.renderedRequestId = invitation.requestId;
     }
     if (['cancelled', 'expired'].includes(invitation.progress)) {
@@ -789,7 +792,7 @@ class ClientFileEditor {
       pending: invitation.readOnly ? 'Verify this code to restore read-only client access. It does not reopen signing.' : 'Request created · awaiting client. Opening the link still requires code verification.',
       expired: 'Code expired. Get a replacement code for this same request.',
       locked: 'Code locked after unsuccessful attempts. Get a replacement code for this same request.',
-      verified: invitation.readOnly ? 'Code already used. Generate a replacement if the client needs to verify read-only access again.' : 'Access verified. No signature has been recorded. A replacement code lets you verify again if your session has ended.',
+      verified: invitation.readOnly ? 'The client can reuse this code until it expires to view their recorded agreement.' : 'Access verified. No signature has been recorded yet. The client can reuse this link and code until it expires.',
       replaced: 'This code was replaced. Refresh status to load the current invitation.',
       request_expired: 'This signing request has expired. Contact the company; a replacement code cannot extend it.',
     };
@@ -863,11 +866,10 @@ class ClientFileEditor {
     const seconds = Math.max(0, Math.ceil((this.remainingAtLoad - (performance.now() - this.countdownStarted)) / 1000));
     const expiry = document.querySelector('#demo-expiry');
     expiry.textContent = this.invitation.state === 'request_expired' ? 'Request expired. Replacement codes cannot extend its deadline.'
-      : this.invitation.state === 'verified' ? 'Code already used. Your verified session has its own expiry.'
       : this.invitation.state === 'locked' ? 'Code locked. Verification is unavailable with this code.'
       : seconds ? `Code expires in ${Math.floor(seconds / 3600)}h ${Math.floor(seconds / 60) % 60}m ${seconds % 60}s · ${this.dateFormat.format(Date.parse(this.invitation.expiresAt))}`
       : 'Code expired. The server requires a replacement code.';
-    if (!seconds && this.invitation.state === 'pending') {
+    if (!seconds && ['pending', 'verified'].includes(this.invitation.state)) {
       this.invitation.state = 'expired';
       this.invitation.canReplace = Boolean(this.invitation.accessAvailable
         && (this.invitation.progress === 'awaiting_client' || this.invitation.readOnly));
@@ -881,6 +883,12 @@ class ClientFileEditor {
     }
   }
 
+  showInvitation() {
+    const dialog = document.querySelector('#invitation-dialog');
+    document.querySelector('#invitation-copy-status').textContent = '';
+    if (!dialog.open) dialog.showModal?.();
+  }
+
   // 'all' copies a ready-to-paste message with both the link and the code.
   async copyInvitation(kind) {
     const input = document.querySelector(`#demo-${kind === 'all' ? 'link' : kind}`);
@@ -891,11 +899,14 @@ Access code: ${document.querySelector('#demo-code').value}`
       : input.value;
     try {
       await navigator.clipboard.writeText(text);
-      document.querySelector('#demo-status').textContent = { link: 'Link copied.', code: 'Code copied.', all: 'Link and code copied, ready to paste.' }[kind];
+      const copied = { link: 'Link copied.', code: 'Code copied.', all: 'Link and code copied, ready to paste.' }[kind];
+      document.querySelector('#demo-status').textContent = copied;
+      document.querySelector('#invitation-copy-status').textContent = copied;
     } catch {
       input.focus();
       input.select();
       document.querySelector('#demo-status').textContent = 'Copy is unavailable. The value is selected; use your device’s copy command.';
+      document.querySelector('#invitation-copy-status').textContent = 'Copy is unavailable. The value is selected; use your device’s copy command.';
     }
   }
 }

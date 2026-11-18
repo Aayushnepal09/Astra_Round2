@@ -2,7 +2,7 @@
 # Consistent maintenance snapshot, containing credentials: keep it private.
 set -euo pipefail
 if [[ $EUID -ne 0 ]]; then
-    echo 'Run this script as root on the Oracle VM.' >&2
+    echo 'Run this script as root on the deployment VM.' >&2
     exit 1
 fi
 exec 9>/run/astra-backup.lock

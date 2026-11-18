@@ -28,14 +28,15 @@ def demo_code(invitation):
 
 
 def invitation_state(invitation):
+    # A code stays usable for its whole lifetime; "verified" only records that it has been used at least once.
     if invitation.revoked_at:
         return "replaced"
-    if invitation.used_at:
-        return "verified"
     if invitation.expires_at <= timezone.now():
         return "expired"
     if invitation.attempts >= settings.CLIENT_MAX_ATTEMPTS:
         return "locked"
+    if invitation.used_at:
+        return "verified"
     return "pending"
 
 
@@ -168,7 +169,7 @@ class DemoRequestIssuer:
         # Reconcile a retry after the replacement response was lost.
         if str(current.pk) != previous_id:
             return recipient.signing_request
-        if invitation_state(current) not in ("expired", "locked", "verified"):
+        if invitation_state(current) not in ("expired", "locked"):
             raise ValidationError("The current code is still available. Use it before requesting a replacement.")
         self._create_code(recipient)
         # Existing verified sessions remain valid; only unused codes are revoked.
@@ -218,9 +219,9 @@ class DemoRequestIssuer:
             "companySigningUrl": company_url,
             "finalization": self.finalization_snapshot(issued),
             "link": reverse("client_invitation", args=[invitation.pk]),
-            "code": demo_code(invitation) if available and state == "pending" else None,
+            "code": demo_code(invitation) if available and state in ("pending", "verified") else None,
             "expiresAt": invitation.expires_at.isoformat(), "serverNow": timezone.now().isoformat(),
-            "canReplace": available and state in ("expired", "locked", "verified")
+            "canReplace": available and state in ("expired", "locked")
                 and (progress == ClientFile.Status.AWAITING_CLIENT or read_only),
         }
 

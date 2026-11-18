@@ -6,6 +6,7 @@ from django.conf import settings
 from django.contrib.auth.hashers import check_password
 from django.db import DatabaseError
 from django.db.models import F
+from django.db.models.functions import Coalesce, Now
 from django.http import JsonResponse
 from django.middleware.csrf import get_token, rotate_token
 from django.utils import timezone
@@ -37,7 +38,6 @@ def _available(invitation_id, code_hash):
     return ClientInvitation.objects.filter(
         pk=invitation_id,
         code_hash=code_hash,
-        used_at__isnull=True,
         revoked_at__isnull=True,
         expires_at__gt=timezone.now(),
         company__is_active=True,
@@ -68,7 +68,7 @@ class ClientLogin(View):
             if invitation_id is None:
                 return _invalid_code()
             invitation = ClientInvitation.objects.filter(pk=invitation_id).only(
-                "company_id", "client_email", "request_ref", "code_hash"
+                "company_id", "client_email", "request_ref", "code_hash", "used_at", "revoked_at", "expires_at", "attempts"
             ).first()
             if invitation is None:
                 return _invalid_code()
@@ -83,8 +83,8 @@ class ClientLogin(View):
                     return auth_error("This code has expired. Ask the company for a replacement code.", status=410)
                 if state == "locked":
                     return auth_error("This code is locked. Ask the company for a replacement code.", status=429)
-                if state != "pending":
-                    return auth_error("This code has been used or replaced. Resume your verified session or ask the company for a replacement.", status=401)
+                if state not in ("pending", "verified"):
+                    return auth_error("This code has been replaced. Ask the company for the new code.", status=401)
             with ClientAccessThrottle.verification(invitation):
                 reserved = _available(invitation_id, invitation.code_hash).filter(
                     attempts__lt=settings.CLIENT_MAX_ATTEMPTS
@@ -101,7 +101,8 @@ class ClientLogin(View):
                 return _invalid_code()
             redeemed = _available(invitation_id, invitation.code_hash).filter(
                 attempts__lte=settings.CLIENT_MAX_ATTEMPTS
-            ).update(used_at=timezone.now())
+            # Codes are reusable until expiry: keep the first verification time and clear the wrong-guess count.
+            ).update(used_at=Coalesce(F("used_at"), Now()), attempts=0)
             if not redeemed:
                 return _invalid_code()
             establish_client_session(request, invitation)

@@ -245,7 +245,7 @@ test('invitation preview identifies frozen recipient and keeps request and code 
   assert.match(f.nodes.get('#demo-message').textContent, /Sign & submit/);
   assert.match(f.nodes.get('#request-deadline').textContent, /Access-code replacement does not extend it/);
   assert.match(f.nodes.get('#demo-expiry').textContent, /Code expires in/);
-  assert.match(template, /No email is sent in this demo/);
+  assert.match(template, /Normally this invitation is emailed to the client. In this demo/);
 });
 
 test('pending or uncertain cancellation blocks sending and countersigning until explicit status recovery', async () => {

@@ -1,9 +1,9 @@
 {% extends "shared/base.html" %}
 {% block title %}{% if is_new %}New client file{% else %}{{ draft_data.clientName }}{% endif %} · Astra{% endblock %}
 {% block resources %}
-  <link rel="stylesheet" href="{{ static_prefix }}client_file.css?v=ui24">
-  <script type="module" src="{{ static_prefix }}client_file.js?v=ui25"></script>
-  <link rel="stylesheet" href="{{ static_prefix }}workflow.css?v=ui24">
+  <link rel="stylesheet" href="{{ static_prefix }}client_file.css?v=ui26">
+  <script type="module" src="{{ static_prefix }}client_file.js?v=ui26"></script>
+  <link rel="stylesheet" href="{{ static_prefix }}workflow.css?v=ui26">
 {% endblock %}
 {% block body_attributes %}class="draft-editor" data-save-url="{{ save_url }}" data-session-url="{{ session_url }}" data-login-url="{{ login_url }}" data-company-id="{{ company_id }}" data-templates-url="{{ templates_url }}" data-request-url="{{ request_url }}"{% endblock %}
 {% block content %}
@@ -94,13 +94,13 @@
         <section class="draft-section demo-request" aria-labelledby="demo-request-heading">
           <h2 id="demo-request-heading">Review &amp; issue</h2>
           <p class="draft-section-copy" id="demo-send-hint">Save the selected version and signer details first. Issuing a request freezes these details.</p>
-          <button class="button" id="send-demo" type="button" disabled>Send request — Demo</button>
+          <button class="button" id="send-demo" type="button" disabled>Send to client</button>
+          <div id="demo-invitation" hidden><button class="button" type="button" id="invitation-open">View invitation link &amp; code</button></div>
           <button class="button secondary danger" id="cancel-request" type="button" hidden>Cancel request</button>
           <button class="button" id="prepare-replacement" type="button" hidden>Prepare replacement</button>
           <button class="button secondary" id="request-state-reload" type="button" hidden>Load latest saved details</button>
           <p class="field-hint" id="request-lifecycle-status" role="status" aria-live="polite"></p>
           <p class="field-hint" id="request-deadline" hidden></p>
-          <p class="field-hint" id="demo-disclosure">Demo mode: no email is sent. Use this link and code to continue as the client.</p>
           <p id="demo-status" class="field-hint" role="status" aria-live="polite"></p>
           <p id="demo-error" class="field-error" role="alert" hidden></p>
           <a class="button" id="company-countersign" hidden>Review &amp; countersign</a>
@@ -116,8 +116,9 @@
               <a class="draft-back-link" id="signing-history-download">Download signing history</a>
             </div>
           </section>
-          <details id="demo-invitation" hidden><summary>Invitation preview — Demo</summary>
-            <p class="field-hint">In a production version, this invitation would be emailed to the recipient below. No email is sent in this demo. Use the link and code to continue.</p>
+          <dialog id="invitation-dialog" class="workflow-dialog invitation-dialog" aria-labelledby="invitation-dialog-title">
+            <div class="dialog-heading"><h2 id="invitation-dialog-title">Invitation ready</h2><button class="button secondary" type="button" id="invitation-close">Close</button></div>
+            <p class="delivery-note">Normally this invitation is emailed to the client. In this demo, open or copy the link and access code here instead.</p>
             <dl class="invitation-preview"><dt>To</dt><dd id="demo-recipient"></dd><dt>Subject</dt><dd id="demo-subject"></dd></dl>
             <p id="demo-message" class="field-hint"></p>
             <div class="field"><label for="demo-link">Signing link</label><div class="input-wrap"><input id="demo-link" readonly type="text"></div></div>
@@ -130,7 +131,8 @@
               <button class="button secondary" type="button" id="demo-copy-code">Copy code</button>
               <button class="button secondary" type="button" id="demo-replace" hidden>Get replacement code</button>
             </div>
-          </details>
+            <p class="field-hint" id="invitation-copy-status" role="status" aria-live="polite"></p>
+          </dialog>
           <details class="request-options" id="request-options"><summary>Request options &amp; history</summary><div class="draft-agreement-actions">
             <button class="button secondary" type="button" id="demo-refresh">Refresh status</button>
             <a class="draft-back-link" id="request-history" {% if not is_new %}href="{% url 'company_request_history' draft_data.id %}"{% else %}hidden{% endif %}>Request history</a>

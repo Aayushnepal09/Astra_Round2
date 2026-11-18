@@ -36,8 +36,8 @@ class RequestExpiryChecks(LifecycleFixture, TestCase):
         self.assertEqual(state["recipient"], {"name": "Demo Client", "email": "demo-client@example.test"})
         self.assertEqual(state["requestExpiresAt"], issued.expires_at.isoformat())
         page = self.client.get(reverse("company_file_detail", args=[self.file.pk]))
-        self.assertContains(page, "No email is sent in this demo")
-        self.assertContains(page, "Invitation preview")
+        self.assertContains(page, "Normally this invitation is emailed to the client. In this demo")
+        self.assertContains(page, "Invitation ready")
 
     def test_code_expiry_and_replacement_do_not_expire_or_extend_request(self):
         issued = self.issue()
@@ -51,6 +51,27 @@ class RequestExpiryChecks(LifecycleFixture, TestCase):
         self.assertEqual(issued.expires_at.isoformat(), snapshot["requestExpiresAt"])
         self.assertEqual(issued.status, "awaiting_client")
         self.assertEqual(SigningRequest.objects.count(), 1)
+
+    def test_code_is_reusable_until_it_expires_and_success_clears_wrong_guesses(self):
+        from .signing import demo_code
+        issued = self.issue()
+        invitation = self.invitation(issued)
+        url = reverse("client_invitation", args=[invitation.pk])
+        post = lambda code: Client().post(url, {"code": code}, content_type="application/json")
+        wrong = "000000" if demo_code(invitation) != "000000" else "111111"
+        self.assertEqual(post(wrong).status_code, 401)
+        self.assertEqual(post(demo_code(invitation)).status_code, 200)
+        invitation.refresh_from_db()
+        first_use, attempts_after_success = invitation.used_at, invitation.attempts
+        self.assertEqual(attempts_after_success, 0)
+        for _ in range(3):
+            self.assertEqual(post(demo_code(invitation)).status_code, 200)
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.used_at, first_use)
+        self.assertEqual(self.issuer.snapshot(issued)["code"], demo_code(invitation))
+        self.assertFalse(self.issuer.snapshot(issued)["canReplace"])
+        with patch("django.utils.timezone.now", return_value=invitation.expires_at + timedelta(seconds=1)):
+            self.assertEqual(post(demo_code(invitation)).status_code, 410)
 
     def test_new_code_is_clamped_to_request_deadline(self):
         issued = self.issue()
