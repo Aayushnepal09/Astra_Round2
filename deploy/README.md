@@ -1,9 +1,10 @@
-# Oracle evaluation deployment
+# Linux evaluation deployment
 
-Prepared configuration for one Ubuntu 24.04 Arm64 VM, PostgreSQL on localhost,
-Caddy HTTPS, Gunicorn, and the existing isolated DOCX/PDF processing. Oracle VM
-capacity is not confirmed. Nothing in this folder creates Oracle resources or
-upgrades a cloud or AI account. Linux runtime verification remains deferred.
+Prepared configuration for one Ubuntu 24.04 Arm64 or x86-64 VM, PostgreSQL on
+localhost, Caddy HTTPS, Gunicorn, and the existing isolated DOCX/PDF processing.
+Oracle Always Free and an unupgraded Google Cloud Free Trial are supported hosting
+arrangements. Nothing in this folder creates cloud resources or upgrades a cloud
+or AI account. Linux runtime verification remains deferred.
 
 ## Local release preparation
 
@@ -31,13 +32,19 @@ that can prove every possible credential absent.
 - Use an unupgraded Free Tier account and Always Free resources in the home region.
   Confirm existing boot/block volumes plus the new volume remain within the free
   allocation. Trial credits and paid fallback are not part of this setup.
+- Alternatively, use the explicitly agreed Google Cloud Free Trial with available
+  trial credit and no paid-account upgrade. The VM, disk, IPv4 address and network
+  traffic consume that credit; billing alerts are not a spending cap. A required
+  verification prepayment is handled separately under Google's refund conditions.
 - The prepared VCN needs its enabled internet gateway, `0.0.0.0/0` route, and
   regional public subnet. Assign the instance a public IPv4 address.
 - Restrict ingress TCP 22 to the administrator's public IP (`/32` for IPv4).
   Permit ingress TCP 80 and 443 publicly. Keep 8000, 5432, Docker and Caddy's admin
   API closed publicly, in both OCI security rules and the host firewall.
 - A real DNS hostname must point directly to the VM; a free DuckDNS subdomain is
-  suitable. Do not put a CDN or another proxy in front of this configuration.
+  suitable. An IP-based sslip.io hostname can also be used without creating an
+  account. That hostname changes if the VM's external address changes. Do not put
+  a CDN or another proxy in front of this configuration.
 - Keep the SSH private key outside the repository. Transfer files through SSH/SCP,
   never a public bucket, repository or anonymous download URL.
 
@@ -56,7 +63,7 @@ If `unzip` is missing, install it with `sudo apt-get update` and
 `sudo apt-get install -y unzip` first. Do not extract a new release over a running
 installation; see updates below.
 
-The installer targets Ubuntu 24.04 Arm64 and installs OS packages, the official
+The installer targets Ubuntu 24.04 Arm64 or x86-64 and installs OS packages, the official
 stable Caddy package, PostgreSQL, Docker Engine, Python packages and fonts. It
 creates the `astra` service user and private directories, builds the converter,
 and records its immutable local `sha256` image ID. The existing converter uses

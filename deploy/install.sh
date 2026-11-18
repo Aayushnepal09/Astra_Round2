@@ -6,10 +6,14 @@ if [[ $EUID -ne 0 || $# -ne 1 ]]; then
     exit 1
 fi
 source /etc/os-release
-if [[ $ID != ubuntu || $VERSION_ID != 24.04 || $(uname -m) != aarch64 ]]; then
-    echo 'This installer targets Ubuntu 24.04 Arm64 only.' >&2
+if [[ $ID != ubuntu || $VERSION_ID != 24.04 ]]; then
+    echo 'This installer targets Ubuntu 24.04 only.' >&2
     exit 1
 fi
+case $(uname -m) in
+    aarch64|x86_64) ;;
+    *) echo 'Only Arm64 and x86-64 processors are supported.' >&2; exit 1 ;;
+esac
 if [[ $(realpath "$(dirname "$0")/..") != /opt/astra/app || -e /etc/astra/astra.env ]]; then
     echo 'Extract into /opt/astra/app first. Existing configuration requires a manual update.' >&2
     exit 1

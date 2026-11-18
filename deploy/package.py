@@ -30,7 +30,8 @@ def source_files():
                     raise ValueError(f"Release source cannot be a symlink: {path.relative_to(ROOT)}")
                 if name.startswith((".", "test_")) or ".test." in name:
                     continue
-                if path.suffix in extensions or (folder == "deploy" and name == "Caddyfile"):
+                is_converter_build = path == ROOT / "backend" / "agreements" / "converter" / "Dockerfile"
+                if path.suffix in extensions or is_converter_build or (folder == "deploy" and name == "Caddyfile"):
                     yield path
 
 
