@@ -1,5 +1,6 @@
 """Focused grouping, isolation and signing checks with fictional documents."""
 import uuid
+from unittest.mock import patch
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -8,6 +9,8 @@ from django.urls import reverse
 
 from agreements.models import Agreement, TemplateVersion
 from agreements.uploads import AgreementUpload
+from agreements.processing import DocumentError
+from agreements.storage import PrivateDocumentStorage
 from .models import ClientFile, ClientJob, CompanyClient, SigningRequest
 from .organization import ClientOrganization
 from .test_assistant import pdf_bytes
@@ -24,6 +27,47 @@ class ClientOrganizationChecks(LifecycleFixture, TestCase):
 
     def post(self, url, **payload):
         return self.client.post(url, {"workspace_id": str(self.company.pk), "creation_key": str(uuid.uuid4()), **payload}, content_type="application/json")
+
+    def test_creation_keys_require_uuid_text_without_writes(self):
+        before = (CompanyClient.objects.count(), ClientJob.objects.count(), ClientFile.objects.count())
+        routes = [
+            (reverse("company_clients"), {"name": "Invalid key client"}),
+            (reverse("company_client_jobs", args=[self.customer.pk]),
+             {"reference": "INVALID-KEY", "title": "", "versions": []}),
+            (reverse("company_job_agreements", args=[self.job.pk]), {"versions": [str(self.version.pk)]}),
+        ]
+        for url, payload in routes:
+            for key in (None, 1, True, [], {}, "not-a-uuid"):
+                with self.subTest(url=url, key=key):
+                    response = self.post(url, creation_key=key, **payload)
+                    self.assertEqual(response.status_code, 400)
+                    self.assertIn("error", response.json())
+                    self.assertEqual(before, (CompanyClient.objects.count(), ClientJob.objects.count(), ClientFile.objects.count()))
+
+    def test_upload_collision_recovery_preserves_scope_and_winning_artifact(self):
+        content = pdf_bytes(["Fictional upload collision agreement."])
+        key = uuid.uuid4()
+        winner, _ = AgreementUpload(self.company, job=self.job).save(
+            [content], filename="winner.pdf", creation_key=key)
+        other_job = self.organization.create_job(self.customer, reference="UPLOAD-OTHER", title="", version_ids=[], key=uuid.uuid4())
+        before = set(self.storage.root.rglob("*.bin"))
+        for job in (self.job, other_job, None):
+            with self.subTest(job=job):
+                uploader = AgreementUpload(self.company, job=job)
+                # Another upload wins after the initial lookup but before save.
+                with patch.object(uploader, "_existing", side_effect=[None, winner]):
+                    if job == self.job:
+                        recovered, created = uploader.save([content], filename="retry.pdf", creation_key=key)
+                        self.assertEqual(recovered.pk, winner.pk)
+                        self.assertFalse(created)
+                    else:
+                        with self.assertRaises(DocumentError) as error:
+                            uploader.save([content], filename="retry.pdf", creation_key=key)
+                        self.assertEqual(error.exception.code, "upload_scope_conflict")
+                self.assertEqual(set(self.storage.root.rglob("*.bin")), before)
+                self.assertEqual(Agreement.objects.filter(creation_key=key).count(), 1)
+                stored = PrivateDocumentStorage(self.company.pk, winner.pk).inspect(winner.pdf_key, max_bytes=len(content))
+                self.assertEqual(stored.sha256, winner.pdf_sha256)
 
     def test_multiple_agreements_reuse_contacts_and_retries_do_not_duplicate(self):
         second = self.make_version(number=2)

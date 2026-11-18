@@ -245,6 +245,7 @@ class WorkspaceDashboard {
     const card = !all ? null
       : attention ? [`${plural(attention, 'agreement')} need${attention === 1 ? 's' : ''} you.`, 'Company signatures, missing details or processing are waiting for your action.', 'Review them', 'attention']
       : waiting ? [`Waiting on ${plural(waiting, 'client signature')}.`, 'Share the signing link and code with the client, then check back here.', 'See who is waiting', 'waiting']
+      : ready < all ? ['Final records still need processing.', 'All required signatures are recorded. Check final processing before starting work.', 'Check processing', 'all']
       : ['Everything is signed and saved.', 'Start the next client agreement whenever you are ready.', 'Start a new client agreement', null];
     if (!card) return;
     document.querySelector('.setup-footnote').hidden = true;

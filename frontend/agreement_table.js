@@ -57,7 +57,13 @@ export class SigningActions {
       const result = await this.request(file.cancelUrl, { requestId: file.requestId });
       if (this.current?.file.id === file.id) this.dialog.close();
       await table.refresh(true);
-      table.notice.textContent = result.file.status === 'completed' ? 'The agreement had already completed. Its completed documents are preserved.' : 'Request cancelled. Further signing is stopped; existing records are preserved.';
+      table.notice.textContent = result.file.status === 'completed'
+        ? 'The agreement had already completed. Its completed documents are preserved.'
+        : result.file.status === 'expired'
+        ? 'The signing deadline has passed. Earlier signatures and history are preserved.'
+        : result.outcome === 'signatures_complete'
+        ? 'All required signatures were already recorded. The request was not cancelled. Continue finalization; no replacement was prepared.'
+        : 'Request cancelled. Further signing is stopped; existing records are preserved.';
     });
   }
 

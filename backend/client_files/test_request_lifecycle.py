@@ -423,10 +423,11 @@ class LifecycleRaceChecks(LifecycleFixture, TransactionTestCase):
 class RequestLifecycleMigrationChecks(TransactionTestCase):
     def test_existing_requests_receive_independent_status_and_current_pointer(self):
         executor = MigrationExecutor(connection)
+        latest = executor.loader.graph.leaf_nodes()
         previous = [("client_files", "0009_assistant_budget")]
         current = [("client_files", "0010_request_lifecycle")]
+        self.addCleanup(lambda: MigrationExecutor(connection).migrate(latest))
         executor.migrate(previous)
-        self.addCleanup(lambda: MigrationExecutor(connection).migrate(current))
         apps = executor.loader.project_state(previous).apps
         company = apps.get_model("login", "CompanyAccount").objects.create(email="migration@example.test", company_name="Fictional migration")
         agreement = apps.get_model("agreements", "Agreement").objects.create(company_id=company.pk, original_filename="fictional.pdf")
@@ -441,9 +442,12 @@ class RequestLifecycleMigrationChecks(TransactionTestCase):
             records.append((file.pk, issued.pk, status))
         executor = MigrationExecutor(connection)
         executor.migrate(current)
+        migrated_apps = executor.loader.project_state(current).apps
+        migrated_files = migrated_apps.get_model("client_files", "ClientFile")
+        migrated_requests = migrated_apps.get_model("client_files", "SigningRequest")
         for file_id, request_id, status in records:
-            self.assertEqual(ClientFile.objects.get(pk=file_id).current_request_id, request_id)
-            issued = SigningRequest.objects.get(pk=request_id)
+            self.assertEqual(migrated_files.objects.get(pk=file_id).current_request_id, request_id)
+            issued = migrated_requests.objects.get(pk=request_id)
             self.assertEqual(issued.status, status)
             self.assertEqual(issued.preparation_values, {"fictional": status})
 

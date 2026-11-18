@@ -102,7 +102,13 @@ class ClientWorkspaceAccess(CompanyFileAccessMixin):
 
     @staticmethod
     def key(data):
-        return uuid.UUID(data.pop("creation_key", ""))
+        value = data.pop("creation_key", None)
+        if not isinstance(value, str):
+            raise ValidationError("Supply a valid creation key. Reload the form and try again.")
+        try:
+            return uuid.UUID(value)
+        except ValueError as error:
+            raise ValidationError("Supply a valid creation key. Reload the form and try again.") from error
 
 
 class CompanyClients(ClientWorkspaceAccess, View):

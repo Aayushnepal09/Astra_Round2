@@ -4,7 +4,7 @@ Prepared configuration for one Ubuntu 24.04 Arm64 or x86-64 VM, PostgreSQL on
 localhost, Caddy HTTPS, Gunicorn, and the existing isolated DOCX/PDF processing.
 Oracle Always Free and an unupgraded Google Cloud Free Trial are supported hosting
 arrangements. Nothing in this folder creates cloud resources or upgrades a cloud
-or AI account. Linux runtime verification remains deferred.
+or AI account. Live deployment state is maintained separately from these installation instructions.
 
 ## Local release preparation
 
@@ -121,12 +121,11 @@ developer's SQLite data or documents. If those must be retained on the server,
 plan a matched database/document migration before issuing requests. Keep the
 existing local database and documents intact.
 
-Runtime verification, including Django deployment checks, PostgreSQL migrations,
-DOCX conversion, native PDFium/font behavior, real AI access, signing order,
-completed downloads, and proxy/rate-limit behavior, needs separate authorization
-before evaluation. Migrations in the installer are deployment operations, not a
-claim that these checks passed. Once that work is authorized and completed,
-activation uses:
+For each release, verify Django deployment checks, PostgreSQL migrations,
+DOCX conversion, native PDFium/font behavior, signing order, completed downloads,
+and proxy/rate-limit behavior. Verify real AI access separately when authorized.
+Migrations in the installer do not establish that these checks passed, and earlier
+verification does not cover later source changes. After verification, activation uses:
 
 ```bash
 sudo systemctl enable --now astra.service
@@ -140,7 +139,7 @@ in this pool; a long operation can delay other requests. It does not introduce a
 paid queue or simulate background success. PDF/DOCX process limits remain intact.
 Systemd's 3 GB application limit covers application children, not Docker-managed
 containers, which retain their separate limits. Suitability for 1 OCPU / 6 GB is
-an estimate until runtime verification.
+subject to verification on the target host.
 
 `DJANGO_BEHIND_PROXY=1` requires loopback requests with a valid client IP and HTTPS
 metadata. Caddy overwrites that metadata using the connected client address.

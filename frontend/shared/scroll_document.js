@@ -22,7 +22,8 @@ export class ScrollDocument {
       const canvas = document.createElement('div');
       canvas.className = 'document-page-canvas';
       const size = geometry[number - 1] || { width: 612, height: 792 };
-      canvas.style.aspectRatio = `${size.width} / ${size.height}`;
+      const rotated = size.rotation === 90 || size.rotation === 270;
+      canvas.style.aspectRatio = rotated ? `${size.height} / ${size.width}` : `${size.width} / ${size.height}`;
       const image = document.createElement('img');
       image.alt = `Agreement page ${number} of ${count}`;
       image.draggable = false;

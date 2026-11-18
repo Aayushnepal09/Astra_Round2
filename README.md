@@ -1,22 +1,29 @@
 # Astra_Round2
 
-Planned agreement workflows for company staff and client signers.
+Agreement preparation and signing for company staff and client signers.
 
 ## Deployment preparation
 
-The Oracle Linux deployment configuration and source-only release packager are in
+The Ubuntu deployment configuration and source-only release packager are in
 [`deploy/`](deploy/README.md). Install `backend/requirements-production.txt` for
 production dependencies; Windows skips the Linux-only Gunicorn server. Local
-development keeps its existing SQLite configuration. The deployment is not live:
-Oracle capacity, server credentials/DNS and Linux runtime verification are still
-required. No private documents, local credentials or planning instructions belong
+development keeps its existing SQLite configuration. These files describe how to
+reproduce an installation; live deployment state is maintained separately.
+No private documents, local credentials or planning instructions belong
 in a release package.
 
 ## Local UI
 
-For an existing checkout with `.venv` installed, double-click **start.cmd** (or run `./start.cmd` from PowerShell). It checks configuration, applies local database migrations, and starts Django at `http://127.0.0.1:8000/company/login/`. Keep its window open; Ctrl+C stops the server. Read startup errors in that window.
+From the project root, use Python 3.12 and PowerShell:
 
-Run `python backend/manage.py runserver` in the existing virtual environment, then open `http://127.0.0.1:8000/company/login/`. Company sign-in opens the protected dashboard.
+```powershell
+python -m venv .venv                       # Fresh checkout only
+.venv/Scripts/python.exe -m pip install -r backend/requirements.txt
+.venv/Scripts/python.exe backend/manage.py migrate
+.venv/Scripts/python.exe backend/manage.py runserver
+```
+
+Open `http://127.0.0.1:8000/company/login/`. Keep the server window open; Ctrl+C stops it. A fresh checkout contains no accounts or uploaded documents. In a separate terminal, create a local company with `.venv/Scripts/python.exe backend/provision.py company --email company@example.test --name "Demo Company"`; enter its password at the prompts. Existing checkouts retain their accounts and data and do not need provisioning again.
 
 All interface code is in `frontend/`. Login and dashboard each have one HTML, CSS, and JavaScript file. Shared templates, theme, controls, session helpers, and assets are in `frontend/shared/`.
 
@@ -88,7 +95,7 @@ Company preparation and signer review show document pages in a continuous scroll
 
 Signers can tap a numbered document box or choose one field at a time. The first signature tap asks them to confirm their typed name; later taps apply that signature only to the selected box within the same review session. **Fill my name and email** fills only empty, clearly labelled name/email fields using that request's assigned recipient details. It preserves existing entries and leaves dates, signatures, initials, acknowledgements and consent for the signer. A required-field count shows progress; the server remains the final validator. **Sign & submit** still requires explicit consent. Field entry is separate from AI assistance. Wide screens show fields on the left, the agreement in the centre, and help on the right. Narrow screens place collapsible help above the document. **Next required field** cycles through unfinished required fields, skips filled fields, and reveals the selected box. On mobile the document toolbar provides the same navigation, and tapping a field opens its editor without discarding other entries.
 
-Open the root `.env` file and set `GROQ_API_KEY=your_free_plan_key_here`, then save and restart Django. This local file is ignored by Git. If it is missing after cloning, create it beside `start.cmd` with that line. Do not put a key in the browser, source code, screenshots, or chat. Quotes around the value are optional. Only `GROQ_API_KEY` is loaded from this file; other Django settings continue to use server environment variables. A shell `GROQ_API_KEY` takes precedence, including an explicitly empty value. No dotenv package is required.
+Open the root `.env` file and set `GROQ_API_KEY=your_free_plan_key_here`, then save and restart Django. This local file is ignored by Git. If it is missing after cloning, create it beside `README.md` with that line. Do not put a key in the browser, source code, screenshots, or chat. Quotes around the value are optional. Only `GROQ_API_KEY` is loaded from this file; other Django settings continue to use server environment variables. A shell `GROQ_API_KEY` takes precedence, including an explicitly empty value. No dotenv package is required.
 
 Use a Groq **Free Plan** organization with `openai/gpt-oss-20b` enabled. No paid fallback, alternate model, web search, or action tools are configured. The API key is server-only. Relevant document text, the question, and frozen company-prepared values are sent to Groq for inference; check its account data controls, including zero data retention. See [Groq model documentation](https://console.groq.com/docs/model/openai/gpt-oss-20b), [free quotas](https://console.groq.com/docs/rate-limits), and [data controls](https://console.groq.com/docs/your-data). Account quotas can differ and change; do not enable paid overages.
 
@@ -96,11 +103,11 @@ The client review page offers **Summarize this agreement** and questions with su
 
 Text extraction runs in the existing bounded PDF process. Every page is accounted for. No OCR is installed: scanned pages, images, PDF forms, and decoding problems cause explicit readability limits. Complete summaries are disabled if any page has a readability limitation. Extraction cannot guarantee correct reading order in complex tables or columns. Citations are validated against supplied authorized passages, but models can still misinterpret wording; clients should check the original pages.
 
-Local defaults: 2,000 characters per question; 6,000 UTF-8 bytes across serialized input messages; 1,000 completion tokens including reasoning; a 30-second provider-process deadline; at most one provider call per minute and 25 per UTC day shared across the application database. Attempts count even when a provider call fails; no automatic retries occur. Provider quotas may reject requests earlier. Quota, timeout, unconfigured-provider, and invalid-answer errors remain visible without blocking signing.
+Local defaults: 2,000 characters per question; 14,000 UTF-8 bytes across serialized input messages; 1,000 completion tokens including reasoning; a 30-second provider-process deadline; at most six provider calls per minute and 60 per UTC day shared across the application database. A shared 7,200-token minute budget includes estimated input/schema/output reservations, and only one call runs at a time. Client answers and field suggestions share these budgets. Attempts count even when a provider call fails; no automatic retries occur. Provider quotas may reject requests earlier. Quota, timeout, unconfigured-provider, and invalid-answer errors remain visible without blocking signing.
 
 Complete summaries currently support only agreements whose full readable context fits the input allowance. Larger agreements show an explicit limit; narrower questions use a local passage subset and cannot establish that information is absent elsewhere. Multi-call long-document summaries and OCR are not implemented. No pages are silently truncated into a claimed complete summary. Responses are plain text with application-built citations; document/model content cannot supply executable HTML or action links.
 
-The assistant quota table is added by migration `0009_assistant_budget`; `start.cmd` applies it. To run the isolated backend checks in the existing virtual environment: `python backend/manage.py test client_files.test_assistant test_local_config`. These checks use generated fictional PDFs and mocked provider responses. A configured API key and a separate live check are still needed to verify model availability and answer quality.
+The assistant quota table is added by migration `0009_assistant_budget`; the migration command above applies it. Backend tests use isolated test databases, fictional PDFs, temporary document storage and mocked provider responses. From the root, run `.venv/Scripts/python.exe backend/manage.py test agreements client_files test_local_config` (unqualified discovery from the root finds zero tests), and `node --test frontend/*.test.cjs` with Node.js installed. SQLite's default in-memory test database skips five writer-concurrency tests; use a separate file test database through Django's `DATABASES["default"]["TEST"]["NAME"]` setting to exercise them. Never point test storage or a test database at demo data. A configured API key and a separate live check are still needed to verify model availability and answer quality.
 
 ## Company workflow
 

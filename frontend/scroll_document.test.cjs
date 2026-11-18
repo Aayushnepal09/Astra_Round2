@@ -10,14 +10,14 @@ function node() {
     scrollIntoView(options){this.scrolled=true;this.scrollOptions=options;},remove(){},getBoundingClientRect:()=>({top:0,bottom:800}),add(child){this.append(child);},querySelector:()=>({}),
   };
 }
-function fixture() {
+function fixture(geometry = [{width:792,height:612}]) {
   const pending=[],revoked=[],errors=[];
   const context=vm.createContext({document:{createElement:node},window:{addEventListener(){},removeEventListener(){}},
     IntersectionObserver:class{observe(){}disconnect(){}},AbortController,innerHeight:800,requestAnimationFrame:()=>1,cancelAnimationFrame(){},
     URL:{createObjectURL:()=> 'blob:'+Math.random(),revokeObjectURL:x=>revoked.push(x)},
     fetch:(url,options)=>new Promise((resolve,reject)=>{pending.push({url,options,resolve});options.signal.addEventListener('abort',()=>{const error=new Error();error.name='AbortError';reject(error);});})});
   vm.runInContext(readFileSync(__dirname+'/shared/scroll_document.js','utf8').replace('export class ScrollDocument','class ScrollDocument')+'\nglobalThis.Viewer=ScrollDocument;',context);
-  const root=node();const viewer=new context.Viewer({root,count:6,geometry:[{width:792,height:612}],url:n=>'/page/'+n,onError:e=>errors.push(e)});
+  const root=node();const viewer=new context.Viewer({root,count:6,geometry,url:n=>'/page/'+n,onError:e=>errors.push(e)});
   const finish=index=>pending[index].resolve({ok:true,blob:async()=>({type:'image/png'})});
   return {viewer,root,pending,revoked,errors,finish};
 }
@@ -27,6 +27,12 @@ test('continuous pages retain geometry, limit concurrent loads, and release dist
   f.finish(0);await tick();assert.equal(f.pending.length,3);f.finish(1);f.finish(2);await tick();
   f.viewer.goTo(6);assert.equal(f.revoked.length,3);assert.equal(f.root.children.length,6);assert.equal(f.viewer.pages.get(6).section.scrolled,true);
   f.finish(3);await tick();f.viewer.destroy();assert.equal(f.root.children.length,0);assert.equal(f.revoked.length,4);
+});
+test('rotated PDF pages use their displayed proportions before images load',()=>{
+  const f=fixture([0,90,180,270].map(rotation=>({width:612,height:792,rotation})));
+  assert.deepEqual([1,2,3,4].map(number=>f.viewer.pages.get(number).canvas.style.aspectRatio),
+    ['612 / 792','792 / 612','612 / 792','792 / 612']);
+  f.viewer.destroy();
 });
 test('jumping away aborts an obsolete page request without surfacing an error',async()=>{
   const f=fixture();f.viewer.goTo(5);assert.equal(f.pending[0].options.signal.aborted,true);

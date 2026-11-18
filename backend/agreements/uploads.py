@@ -93,6 +93,8 @@ class AgreementUpload:
                     if pdf_artifact.key != artifact.key:
                         self._cleanup(storage, pdf_artifact.key)
                 if winner is not None:
+                    if winner.job_id != (self.job.pk if self.job else None):
+                        raise DocumentError("This upload key belongs to a different document scope. Choose the file again.", "upload_scope_conflict")
                     return winner, False
                 raise
             return agreement, True
