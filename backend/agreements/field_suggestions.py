@@ -82,11 +82,33 @@ class FieldSuggester:
                 if not detected:
                     raise
                 warning = f' AI could not classify the remaining blanks: {error}. Clear document labels are still available below.'
-        fields = sorted(detected + ai_fields, key=lambda field: (field['page'], field['y'], field['x']))[:60]
+        fields = sorted(self.align_signer_fields(detected + ai_fields), key=lambda field: (field['page'], field['y'], field['x']))[:60]
         return {"fields": fields, "coverage": coverage,
                 "message": (f'{len(detected)} fields identified from explicit document labels. '
                             + ('AI reviewed ambiguous blanks. ' if ai_fields else '')
                             + 'Review each role and position before adding. Business details are assigned to company preparation before sending; signer fields remain separate.' + warning)}
+
+    PARTY_WORDS = ('client', 'company', 'customer', 'provider', 'vendor', 'supplier')
+
+    @classmethod
+    def align_signer_fields(cls, fields):
+        # Generic labels ("Date:", "Printed name:") carry no party; they belong to the block of the nearest
+        # party-named signer field just above them in the same column, whoever classified them.
+        names_party = lambda field: any(word in field.get('evidence', '').lower() for word in cls.PARTY_WORDS)
+        signers = [field for field in fields if field['role'] in ('client', 'company') and names_party(field)]
+        for field in fields:
+            if field['role'] not in ('client', 'company'):
+                continue
+            above = [anchor for anchor in signers if anchor is not field and anchor['page'] == field['page']
+                     and abs(anchor['x'] - field['x']) < .3 and 0 <= field['y'] - anchor['y'] <= .2]
+            if above and not names_party(field):
+                field['role'] = max(above, key=lambda anchor: anchor['y'])['role']
+            evidence = field.get('evidence', '').lower()
+            if (field['type'] in ('signature', 'initials') and 'sign' not in evidence and 'initial' not in evidence
+                    and ('name' in evidence or 'title' in evidence)):
+                field['type'] = 'text'
+                field['label'] = field['evidence'].strip().rstrip(':_ ').strip()[:120] or field['label']
+        return fields
 
     @staticmethod
     def validate(result, anchors, agreement):

@@ -66,6 +66,17 @@ def paragraph_lines(text, metrics, size, width):
     return lines
 
 
+def word_lines(text, metrics, size, width):
+    # Wrap on word boundaries per paragraph; a single word longer than the box still falls back to characters.
+    lines = []
+    for paragraph in text.replace("\r\n", "\n").replace("\r", "\n").expandtabs(4).split("\n"):
+        wrapped = paragraph_lines(paragraph, metrics, size, width) if paragraph.strip() else [""]
+        if not wrapped:
+            return None
+        lines.extend(wrapped)
+    return lines
+
+
 def page_matrix(page, u, v):
     left, bottom, right, top = page.get_bbox()
     return {
@@ -116,12 +127,20 @@ def complete(path, fields, configured_font):
                         box_width, box_height = field["width"] * width, field["height"] * height
                         chosen = None
                         ascent, descent = metrics.getmetrics()
-                        for half_points in range(24, 11, -1):
-                            size = half_points / 2
-                            line_height = (ascent + descent) * size / 100 * 1.05
-                            lines = (paragraph_lines if field.get('_inline_group') else lines_for)(text, metrics, size, box_width - 2)
-                            if lines and len(lines) * line_height <= box_height - 2:
-                                chosen = size, line_height, lines
+                        inline = field.get('_inline_group')
+                        # Prefer one line at any size before wrapping, so short values never split mid-word.
+                        layouts = [] if inline or "\n" in text or "\r" in text else [
+                            lambda size: [text] if metrics.getlength(text) * size / 100 <= box_width - 2 else None]
+                        layouts.append(lambda size: (paragraph_lines if inline else word_lines)(text, metrics, size, box_width - 2))
+                        for layout in layouts:
+                            for half_points in range(24, 11, -1):
+                                size = half_points / 2
+                                line_height = (ascent + descent) * size / 100 * 1.05
+                                lines = layout(size)
+                                if lines and len(lines) * line_height <= box_height - 2:
+                                    chosen = size, line_height, lines
+                                    break
+                            if chosen:
                                 break
                         if chosen is None:
                             fail("field_overflow")
@@ -155,7 +174,11 @@ def complete(path, fields, configured_font):
                                 if bounds[2].value - bounds[0].value > box_width - 2:
                                     fail("field_overflow")
                                 u = field["x"] * width + 1
-                                v = field["y"] * height + 1 + ascent * size / 100 + line_index * line_height
+                                if len(lines) == 1 and not inline:
+                                    # Sit single-line values on the bottom of the box, where the blank's underline is.
+                                    v = field["y"] * height + box_height - descent * size / 100 - max(2, size * 0.3)
+                                else:
+                                    v = field["y"] * height + 1 + ascent * size / 100 + line_index * line_height
                                 raw.FPDFPageObj_Transform(obj, *page_matrix(page, u, v))
                                 if not raw.FPDFPage_InsertObject(page, obj):
                                     fail("processing_failed")

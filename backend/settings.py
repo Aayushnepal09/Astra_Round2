@@ -118,7 +118,8 @@ ASSISTANT_QUESTION_MAX_CHARS = 2000
 ASSISTANT_INPUT_MAX_BYTES = 14000
 ASSISTANT_MAX_COMPLETION_TOKENS = 1000
 ASSISTANT_TIMEOUT = 30
-ASSISTANT_DAILY_CALLS = 25
+# Shared by client answers and AI field suggestions; Groq's free 200K tokens/day remains the hard backstop.
+ASSISTANT_DAILY_CALLS = 60
 # Below Groq's published Free Plan limits (30 RPM, 8K TPM, 200K TPD).
 # Byte-based token estimates are conservative estimates, not an exact tokenizer.
 ASSISTANT_REQUESTS_PER_MINUTE = 6

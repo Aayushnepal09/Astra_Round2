@@ -260,3 +260,17 @@ class FieldSuggestionChecks(TestCase):
         self.assertEqual(result.status_code, 422)
         provider.assert_not_called()
 
+
+    def test_generic_signer_labels_follow_the_party_block_above_them(self):
+        field = lambda role, kind, y, evidence, x=.2: {'role': role, 'type': kind, 'page': 2, 'x': x, 'y': y, 'label': kind, 'evidence': evidence}
+        fields = [field('client', 'signature', .15, 'Client signature:'), field('client', 'name', .18, 'Printed name:'),
+                  field('client', 'date', .21, 'Date:'), field('company', 'signature', .31, 'Company signature:'),
+                  field('company', 'signature', .34, 'Name and title:'), field('client', 'date', .37, 'Date:'),
+                  field('client', 'signature', .31, 'Client signature:', x=.6), field('company', 'date', .34, 'Date:', x=.6),
+                  field('preparation', 'text', .36, 'Fee:'), field('client', 'date', .9, 'Date:')]
+        aligned = FieldSuggester.align_signer_fields(fields)
+        self.assertEqual([(f['role'], f['type']) for f in aligned],
+                         [('client', 'signature'), ('client', 'name'), ('client', 'date'), ('company', 'signature'),
+                          ('company', 'text'), ('company', 'date'), ('client', 'signature'), ('client', 'date'),
+                          ('preparation', 'text'), ('client', 'date')])
+        self.assertEqual(aligned[4]['label'], 'Name and title')

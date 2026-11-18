@@ -10,6 +10,7 @@ from pathlib import Path
 from django.conf import settings
 from django.db import transaction
 from django.db.models import F
+from django.db.models.functions import Greatest
 from django.utils import timezone
 
 from .models import AssistantBudget
@@ -62,6 +63,14 @@ class AssistantAdmission:
         return lease
 
     @staticmethod
+    def refund(tokens, reserved_at):
+        # Return the unused part of a reservation to the same per-minute window once actual usage is known.
+        if tokens > 0:
+            AssistantBudget.objects.filter(
+                provider="groq-tokens", next_at__gt=timezone.now(), next_at__lte=reserved_at + timedelta(seconds=60),
+            ).update(calls=Greatest(F("calls") - tokens, 0))
+
+    @staticmethod
     def release(lease):
         AssistantBudget.objects.filter(provider="groq-active", next_at=lease).update(next_at=timezone.now())
 
@@ -95,6 +104,7 @@ class GroqAssistant:
         tokens = math.ceil(len(json.dumps(body, ensure_ascii=False).encode("utf-8")) / 3) + settings.ASSISTANT_MAX_COMPLETION_TOKENS + 128
         if tokens > settings.ASSISTANT_TOKENS_PER_MINUTE:
             raise AssistantError("This context exceeds the assistant's bounded free-plan allowance. Ask a narrower question.", status=422, code="assistant_context_limit")
+        reserved_at = timezone.now()
         lease = AssistantAdmission.reserve(tokens)
         try:
             # Kill the entire call at the deadline, including a slowly streaming response.
@@ -127,6 +137,9 @@ class GroqAssistant:
             if transport["status"] != 200:
                 raise AssistantError("The assistant provider is unavailable. Try later; signing remains available.")
             result = transport["body"]
+            used = result.get("usage", {}).get("total_tokens")
+            if type(used) is int and 0 <= used < tokens:
+                AssistantAdmission.refund(tokens - used, reserved_at)
             choice = result["choices"][0]
             if choice["finish_reason"] != "stop":
                 raise ValueError

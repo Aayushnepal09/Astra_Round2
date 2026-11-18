@@ -301,6 +301,17 @@ class AssistantChecks(TestCase):
         with self.assertRaises(AssistantError):
             AssistantAdmission.reserve()
 
+    def test_unused_reservation_returns_to_the_same_minute_only(self):
+        reserved_at = timezone.now()
+        AssistantAdmission.release(AssistantAdmission.reserve(4000))
+        AssistantAdmission.refund(3000, reserved_at)
+        self.assertEqual(AssistantBudget.objects.get(provider="groq-tokens").calls, 1000)
+        AssistantAdmission.refund(5000, reserved_at)
+        self.assertEqual(AssistantBudget.objects.get(provider="groq-tokens").calls, 0)
+        AssistantBudget.objects.filter(provider="groq-tokens").update(calls=500)
+        AssistantAdmission.refund(500, reserved_at - timedelta(minutes=5))
+        self.assertEqual(AssistantBudget.objects.get(provider="groq-tokens").calls, 500)
+
     def test_admission_resets_daily_count(self):
         AssistantBudget.objects.create(provider="groq", day=timezone.now().date() - timedelta(days=1), calls=25,
                                        next_at=timezone.now() - timedelta(seconds=1))
