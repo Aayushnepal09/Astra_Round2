@@ -47,7 +47,7 @@ class WorkspaceDashboard {
     this.statusTimer = setInterval(() => { if (!document.hidden && this.activeView === 'files' && !this.requestController) this.refreshWorkspace(); },15000);
     window.addEventListener('focus', () => { if(this.activeView === 'files') this.refreshWorkspace(); });
     window.addEventListener('pagehide', () => clearInterval(this.statusTimer));
-    const initialRoute = window.location.hash.slice(1) || 'files';
+    const initialRoute = window.location.hash.slice(1) || 'overview';
     this.navigate(initialRoute, false, false);
     this.applySnapshot(data);
   }
