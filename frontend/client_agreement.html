@@ -1,18 +1,17 @@
 {% extends "shared/base.html" %}
 {% block title %}Review agreement · Astra{% endblock %}
 {% block resources %}
-  <link rel="stylesheet" href="{{ static_prefix }}client_file.css?v=ui5">
-  <link rel="stylesheet" href="{{ static_prefix }}client_agreement.css?v=ui5">
-  <link rel="stylesheet" href="{{ static_prefix }}shared/scroll_document.css">
-  <script type="module" src="{{ static_prefix }}client_agreement.js?v=countersign1"></script>
-  <link rel="stylesheet" href="{{ static_prefix }}workflow.css?v=workflow2">
-  <link rel="stylesheet" href="{{ static_prefix }}review_sidebar.css?v=countersign1">
+  <link rel="stylesheet" href="{{ static_prefix }}client_file.css?v=ui24">
+  <link rel="stylesheet" href="{{ static_prefix }}client_agreement.css?v=ui24">
+  <link rel="stylesheet" href="{{ static_prefix }}shared/scroll_document.css?v=ui24">
+  <script type="module" src="{{ static_prefix }}client_agreement.js?v=ui22"></script>
+  <link rel="stylesheet" href="{{ static_prefix }}workflow.css?v=ui24">
 {% endblock %}
 {% block body_attributes %}class="draft-editor signing-with-nav" data-logout-url="{{ logout_url }}" data-invitation-url="{{ invitation_url }}" data-signing-url="{{ signing_url }}" data-assistant-url="{{ assistant_url }}"{% endblock %}
 {% block content %}
   <a class="draft-skip-link" href="#agreement-main">Skip to agreement</a>
   <aside class="review-sidebar" aria-label="{% if company_signing %}Company{% else %}Client{% endif %} navigation">
-    <a class="brand" href="{% if company_signing %}{{ dashboard_url }}{% else %}{{ portal_url }}{% endif %}" aria-label="Astra home"><span class="reference-logo"><svg aria-hidden="true"><use href="#icon-check"/></svg></span>astra</a>
+    <a class="brand" href="{% if company_signing %}{{ dashboard_url }}{% else %}{{ portal_url }}{% endif %}" aria-label="Astra home"><svg aria-hidden="true"><use href="#astra-mark"/></svg>astra<span class="brand-dot">.</span></a>
     <div class="review-nav-identity"><strong>{% if company_signing %}{{ company_name }}{% else %}{{ client_name }}{% endif %}</strong><span>{% if company_signing %}Company workspace{% else %}Client portal{% endif %}</span></div>
     <nav class="review-sidebar-nav" aria-label="Agreement navigation">
       <a href="{% if company_signing %}{{ dashboard_url }}#files{% else %}{{ portal_url }}{% endif %}"><svg class="icon" aria-hidden="true"><use href="#icon-grid"/></svg>{% if company_signing %}Workspace home{% else %}Agreements home{% endif %}</a>
@@ -28,6 +27,7 @@
   </header>
   <main class="draft-main" id="agreement-main" tabindex="-1">
     <div class="draft-heading"><div><h1>{{ agreement_name }}</h1><p>Version {{ version_number }} · {% if company_signing %}Company countersignature as{% else %}Signing as{% endif %} {{ signer_name }}</p></div><span class="draft-badge" id="signing-progress">{% if company_signing %}Company signature required{% else %}Awaiting client{% endif %}</span></div>
+    <div class="signing-meter" id="signing-meter" role="progressbar" aria-labelledby="signing-meter-label" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-name="{{ signer_name }}"><p id="signing-meter-label">Hi {{ signer_name }}</p><div class="signing-meter-track"><span id="signing-meter-fill"></span></div></div>
     {% if company_signing %}<section class="client-signed-preview" data-complete="{{ agreement_completed|yesno:'true,false' }}" role="status" aria-label="Client signature received"><strong id="client-signature-status-title">{% if company_signature_pending %}Client signed · your company signature is required{% else %}Client signature recorded{% endif %}</strong><p>{{ client_signer_name }} signed on <time datetime="{{ client_signed_at|date:'c' }}">{{ client_signed_at|date:"M j, Y g:i A T" }}</time>. Their accepted signature and entries are shown on the document below.</p><p id="company-preview-status">{% if company_signature_pending %}This is an in-progress preview. The final signed PDF is available after all required signatures are received.{% elif agreement_completed %}All required signatures are received. The completed document is available from the client file.{% else %}All required signatures are recorded. Final document processing is pending.{% endif %}</p></section>{% endif %}
     <p class="review-notice" id="signing-notice">{% if company_signing %}The client’s submission is recorded. This file remains pending your company countersignature. {% endif %}Review the agreement, complete your assigned fields, and confirm your intent to sign. Only Sign &amp; submit records your signature.</p>
     <section id="signing-confirmation" class="signing-confirmation" tabindex="-1" aria-labelledby="confirmation-heading" hidden>

@@ -52,11 +52,16 @@ class ClientFileEditor {
     });
     this.sendButton = document.querySelector('#send-demo');
     this.invitation = null;
-    this.sendButton.addEventListener('click', () => this.requestInvitation());
+    this.sendButton.addEventListener('click', () => this.saveAndSend());
+    document.querySelector('#file-summary-edit').addEventListener('click', () => {
+      const details = document.querySelector('#draft-setup-details');
+      details.open = true;
+      details.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    });
     document.querySelector('#finalize-agreement').addEventListener('click', () => this.finalize());
     document.querySelector('#demo-replace').addEventListener('click', () => this.requestInvitation(true));
     document.querySelector('#demo-refresh').addEventListener('click', () => this.loadInvitation());
-    for (const kind of ['link', 'code']) document.querySelector(`#demo-copy-${kind}`).addEventListener('click', () => this.copyInvitation(kind));
+    for (const kind of ['link', 'code', 'all']) document.querySelector(`#demo-copy-${kind}`).addEventListener('click', () => this.copyInvitation(kind));
     setInterval(() => this.renderCountdown(), 1000);
     const refreshIssuedStatus = () => {
       if (!document.hidden && this.sessionReady && !this.checkingSession && !this.requestBusy && !this.saving && !this.dirty
@@ -175,17 +180,20 @@ class ClientFileEditor {
   }
 
   updateState() {
+    this.renderSummary();
     const busy = this.checkingSession || this.saving || this.requestBusy;
     this.fields.disabled = busy || !this.sessionReady || this.issued;
     this.button.disabled = busy || !this.sessionReady || this.issued || this.draftConflict || (!this.isNew && !this.dirty);
-    this.sendButton.disabled = busy || !this.sessionReady || this.isNew || this.dirty || this.recoveryRequired || this.draftConflict
+    // Missing setup is caught here, before the server has to reject the send.
+    const setupMissing = this.requestState?.status === 'draft' && this.setupReady === false;
+    this.sendButton.disabled = busy || !this.sessionReady || this.isNew || setupMissing || this.recoveryRequired || this.draftConflict
       || this.cancellationPending || ['cancelled', 'expired'].includes(this.requestState?.status) || (this.requestState?.status === 'draft' && this.issued);
     this.reloadLatest.disabled = busy || !this.sessionReady;
     this.stateReload.disabled = busy || !this.sessionReady;
     this.cancelButton.disabled = busy || !this.sessionReady;
     this.prepareButton.disabled = busy || !this.sessionReady || this.cancellationPending;
     this.cancelButton.textContent = this.requestBusy && this.cancellationPending ? 'Cancellation pending…' : 'Cancel request';
-    this.sendButton.textContent = this.requestBusy ? 'Checking request…' : 'Send request — Demo';
+    this.sendButton.textContent = this.requestBusy ? 'Checking request…' : this.saving ? 'Saving…' : this.dirty ? 'Save & send request — Demo' : 'Send request — Demo';
     this.sendButton.setAttribute('aria-busy', String(this.requestBusy));
     document.querySelector('#demo-replace').disabled = busy || !this.sessionReady || !this.canReplaceCode();
     document.querySelector('#demo-refresh').disabled = busy || !this.sessionReady;
@@ -196,15 +204,14 @@ class ClientFileEditor {
     this.form.setAttribute('aria-busy', String(busy));
     if (this.recoveryReload) this.recoveryReload.disabled = busy || !this.sessionReady;
     this.unsavedNote.hidden = !this.dirty;
-    const reviewing = this.requestState?.status !== 'draft' || (!this.isNew && !this.dirty && !!this.selectedTemplate());
-    document.querySelectorAll('[data-file-step]').forEach(step => {
-      if (step.dataset.fileStep === (reviewing ? 'issue' : 'setup')) step.setAttribute('aria-current', 'step');
-      else step.removeAttribute('aria-current');
-    });
     if (this.requestState?.status === 'draft') {
       document.querySelector('#file-status').textContent = this.dirty ? 'Unsaved changes' : this.setupReady ? 'Ready to send' : 'Needs details';
-      document.querySelector('#demo-send-hint').textContent = this.isNew || this.dirty
-        ? 'Save your setup above first. Then review the selected version, recipients and company values before issuing.'
+      document.querySelector('#demo-send-hint').textContent = setupMissing
+        ? `Before sending: ${this.setupIssues.join(' ')}`
+        : this.isNew
+        ? 'Save this new file first. Then review the selected version, recipients and company values before issuing.'
+        : this.dirty
+        ? 'Your changes are saved first, then the request is issued. Demo mode provides a link and code; no email is sent.'
         : 'Setup saved. Review the details above, then issue the request. Demo mode provides a link and code; no email is sent.';
     }
     const needsGuard = !this.allowLeave && (this.dirty || this.saving);
@@ -279,6 +286,22 @@ class ClientFileEditor {
     this.renderStage(file.status);
   }
 
+  // Progress follows the authoritative request status; the countersign step shows only when the version needs it.
+  renderProgress(status) {
+    const order = ['draft', 'awaiting_client', 'awaiting_company', 'finalizing', 'completed'];
+    const current = order.indexOf(status);
+    const countersign = !document.querySelector('#company-signer-section').hidden;
+    let number = 0;
+    document.querySelectorAll('[data-progress]').forEach(step => {
+      const index = order.indexOf(step.dataset.progress);
+      step.hidden = step.dataset.progress === 'awaiting_company' && !countersign;
+      if (!step.hidden) step.querySelector('span').textContent = String(++number);
+      step.dataset.done = String(current >= 0 && (index < current || status === 'completed'));
+      if (index === current && status !== 'completed') step.setAttribute('aria-current', 'step');
+      else step.removeAttribute('aria-current');
+    });
+  }
+
   renderStage(status) {
     const copy = {
       draft: ['Review & issue', 'Review the template, recipients and company-prepared values. Save your setup before sending.', 'Saving setup does not issue a request. Sending freezes the selected version and recipients.'],
@@ -295,7 +318,9 @@ class ClientFileEditor {
     document.querySelector('#demo-request-heading').textContent = copy[0];
     document.querySelector('#draft-guidance-copy').textContent = copy[2];
     document.body.dataset.fileStatus = status;
-    document.querySelector('#draft-setup-details').open = status === 'draft' || this.recoveryRequired || this.dirty;
+    this.renderProgress(status);
+    // A saved, complete draft starts collapsed behind the summary card; anything unfinished stays open.
+    document.querySelector('#draft-setup-details').open = (status === 'draft' && !(this.setupReady && !this.isNew)) || this.recoveryRequired || this.dirty;
     document.querySelector('#demo-send-hint').textContent = status === 'draft' ? copy[2] : '';
     document.querySelector('#demo-disclosure').hidden = ['completed', 'finalizing', 'cancelled', 'expired'].includes(status);
     this.sendButton.hidden = status !== 'draft';
@@ -418,6 +443,28 @@ class ClientFileEditor {
     }
   }
 
+  // Compact read-out of the setup, kept in sync with the form so staff can check it at a glance.
+  renderSummary() {
+    const summary = document.querySelector('#file-summary');
+    const version = this.inputs?.get('template_version');
+    summary.hidden = !version || this.isNew || !version.value;
+    if (summary.hidden) return;
+    const value = name => this.inputs.get(name)?.value.trim() || '';
+    const person = (name, email) => [name, email && `(${email})`].filter(Boolean).join(' ');
+    const rows = [['Agreement', version.selectedOptions?.[0]?.textContent || ''], ['Client signer', person(value('signer_name'), value('signer_email'))]];
+    if (!document.querySelector('#company-signer-section').hidden) rows.push(['Countersigner', person(value('company_signer_name'), value('company_signer_email'))]);
+    for (const field of this.selectedTemplate()?.preparationFields || []) rows.push([field.label || field.type, this.preparationInputs.get(field.id)?.value.trim() || '']);
+    document.querySelector('#file-summary-list').replaceChildren(...rows.flatMap(([term, detail]) => {
+      const dt = document.createElement('dt');
+      const dd = document.createElement('dd');
+      dt.textContent = term;
+      dd.textContent = detail || 'Not set yet';
+      dd.classList.toggle('missing', !detail);
+      return [dt, dd];
+    }));
+    document.querySelector('#file-summary-edit').textContent = this.issued || (this.requestState && this.requestState.status !== 'draft') ? 'View full setup' : 'Edit setup';
+  }
+
   renderPreparation() {
     const fields = this.selectedTemplate()?.preparationFields || [];
     const container = document.querySelector('#preparation-inputs');
@@ -450,7 +497,7 @@ class ClientFileEditor {
     const prepared = this.selectedTemplate();
     const preparationStatus = document.querySelector('#file-preparation-status');
     preparationStatus.hidden = !prepared || this.recoveryRequired;
-    preparationStatus.textContent = prepared ? `Preparation complete · ${prepared.name} · Version ${prepared.number}` : '';
+    preparationStatus.textContent = prepared ? `Template: ${prepared.name} · Version ${prepared.number}` : '';
     if (this.recoveryRequired) {
       const item = document.createElement('li');
       item.textContent = 'These are local draft entries. Reload issued details to review the frozen agreement setup.';
@@ -459,6 +506,7 @@ class ClientFileEditor {
     }
     const version = this.selectedTemplate();
     document.querySelector('#company-signer-section').hidden = !version?.roles.includes('company');
+    if (document.body.dataset.fileStatus) this.renderProgress(document.body.dataset.fileStatus);
     const preview = document.querySelector('#selected-template-preview');
     preview.hidden = !version;
     if (version) preview.href = version.previewUrl;
@@ -477,6 +525,7 @@ class ClientFileEditor {
     }
     const list = document.querySelector('#agreement-setup-issues');
     this.setupReady = !issues.length;
+    this.setupIssues = issues;
     list.replaceChildren();
     for (const message of issues.length ? issues : [this.issued ? 'Request issued. The selected version and recipients are fixed.' : 'Signer setup details are present. No request has been created.']) {
       const item = document.createElement('li');
@@ -525,6 +574,15 @@ class ClientFileEditor {
     }
   }
 
+  // Saves pending edits, then issues; a failed save or validation stops before any request is created.
+  async saveAndSend() {
+    if (this.dirty) {
+      await this.save(new Event('submit'));
+      if (this.dirty) return;
+    }
+    return this.requestInvitation();
+  }
+
   async save(event) {
     event.preventDefault();
     if (this.button.disabled) return;
@@ -567,6 +625,7 @@ class ClientFileEditor {
       this.savedValues = JSON.stringify(this.readValues());
       this.dirty = false;
       this.saveStatus.textContent = 'Draft saved. No signing request was created.';
+      globalThis.showToast?.('Draft saved');
       this.saveStatus.dataset.state = 'saved';
       this.saveStatus.hidden = false;
     } catch (error) {
@@ -639,6 +698,7 @@ class ClientFileEditor {
       if (!replace && result.created === true) this.loadedRequestId = result.file.currentRequestId;
       this.renderRequestActions(result.file);
       this.renderInvitation(result.invitation, { issuedHere: !replace && result.created === true });
+      globalThis.showToast?.(replace ? 'New access code ready' : 'Request sent. Share the link and code below.');
     } catch (error) {
       this.requestError(error);
     } finally {
@@ -658,7 +718,9 @@ class ClientFileEditor {
       for (const input of this.preparationInputs.values()) input.setAttribute('aria-invalid', 'true');
       this.preparationInputs.values().next().value?.focus();
     }
-    document.querySelector('#demo-status').textContent = 'Request not confirmed. Retry or refresh status to recover the existing request.';
+    document.querySelector('#demo-status').textContent = [400, 409, 422].includes(error.status)
+      ? 'Not sent. Fix the details above, then send again.'
+      : 'Request not confirmed. Retry or refresh status to recover the existing request.';
     if ([401, 403].includes(error.status) || error.code === 'workspace_changed') this.showSessionError(error.message);
   }
 
@@ -716,7 +778,7 @@ class ClientFileEditor {
     document.querySelector('#demo-open').textContent = invitation.readOnly ? 'Open client’s recorded agreement' : 'Open client signing page';
     document.querySelector('#demo-open').classList.toggle('secondary', invitation.progress !== 'awaiting_client');
     document.querySelector('#demo-code').value = invitation.code || '';
-    document.querySelector('#demo-copy-code').disabled = !invitation.code;
+    for (const id of ['#demo-copy-code', '#demo-copy-all']) document.querySelector(id).disabled = !invitation.code;
     document.querySelector('#demo-replace').hidden = !this.canReplaceCode();
     document.querySelector('label[for="demo-link"]').textContent = invitation.readOnly ? 'Read-only client access link' : 'Signing link';
     this.remainingAtLoad = Date.parse(invitation.expiresAt) - Date.parse(invitation.serverNow);
@@ -787,7 +849,7 @@ class ClientFileEditor {
     if (['awaiting_client', 'awaiting_company'].includes(this.invitation.progress)
         && this.requestRemainingAtLoad <= performance.now() - this.countdownStarted) {
       document.querySelector('#demo-code').value = '';
-      document.querySelector('#demo-copy-code').disabled = true;
+      for (const id of ['#demo-copy-code', '#demo-copy-all']) document.querySelector(id).disabled = true;
       document.querySelector('#demo-open').removeAttribute('href');
       document.querySelector('#demo-replace').hidden = true;
       document.querySelector('#demo-expiry').textContent = 'Signing deadline reached. Refresh status to confirm the request outcome.';
@@ -810,7 +872,7 @@ class ClientFileEditor {
       this.invitation.canReplace = Boolean(this.invitation.accessAvailable
         && (this.invitation.progress === 'awaiting_client' || this.invitation.readOnly));
       document.querySelector('#demo-code').value = '';
-      document.querySelector('#demo-copy-code').disabled = true;
+      for (const id of ['#demo-copy-code', '#demo-copy-all']) document.querySelector(id).disabled = true;
       document.querySelector('#demo-replace').hidden = !this.canReplaceCode();
       document.querySelector('#demo-status').textContent = this.invitation.readOnly
         ? 'Read-only access code expired. Get a replacement code for this same agreement; the recorded signature is preserved.'
@@ -819,11 +881,17 @@ class ClientFileEditor {
     }
   }
 
+  // 'all' copies a ready-to-paste message with both the link and the code.
   async copyInvitation(kind) {
-    const input = document.querySelector(`#demo-${kind}`);
+    const input = document.querySelector(`#demo-${kind === 'all' ? 'link' : kind}`);
+    const text = kind === 'all'
+      ? `Please review and sign your agreement.
+Signing link: ${input.value}
+Access code: ${document.querySelector('#demo-code').value}`
+      : input.value;
     try {
-      await navigator.clipboard.writeText(input.value);
-      document.querySelector('#demo-status').textContent = `${kind === 'link' ? 'Link' : 'Code'} copied.`;
+      await navigator.clipboard.writeText(text);
+      document.querySelector('#demo-status').textContent = { link: 'Link copied.', code: 'Code copied.', all: 'Link and code copied, ready to paste.' }[kind];
     } catch {
       input.focus();
       input.select();

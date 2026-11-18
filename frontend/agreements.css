@@ -52,7 +52,7 @@
 .agreement-field-properties { display: grid; grid-template-columns: minmax(150px, 2fr) minmax(110px, 1fr) auto; gap: 10px; align-items: end; padding-top: 14px; }
 .agreement-field-properties h4 { grid-column: 1 / -1; margin: 0; font-size: 12px; }
 .agreement-field-properties label { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 11px; }
-.agreement-field-properties input, .agreement-field-properties select { min-height: 36px; padding: 6px 8px; border: 1px solid #bed0e8; border-radius: 4px; background: white; color: var(--ink); }
+.agreement-field-properties input { min-height: 36px; padding: 6px 8px; border: 1px solid #bed0e8; border-radius: 4px; background: white; color: var(--ink); }
 .agreement-field-properties .agreement-checkbox { flex-direction: row; align-items: center; min-height: 36px; }
 .agreement-field-numbers { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(70px, 1fr)); gap: 8px; }
 .agreement-field-properties > .button { justify-self: start; }
@@ -74,7 +74,7 @@
 .agreement-field:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
 .agreement-field-layer[inert] .agreement-field { pointer-events: none; cursor: default; }
 .agreement-field-picker { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; color: var(--muted); font-size: 12px; }
-.agreement-field-picker select { max-width: 100%; min-height: 36px; padding: 6px 8px; border: 1px solid #bed0e8; border-radius: 4px; background: white; color: var(--ink); }
+.agreement-field-picker select { max-width: 100%; }
 .agreement-field-toolbar { align-items: flex-start; }
 .agreement-save-actions .has-error { color: #9c3028; }
 .agreement-field-properties input, .agreement-field-properties select { min-width: 0; width: 100%; }
@@ -123,3 +123,106 @@
   .agreement-preparation-layout .agreement-field-editor { position: static; max-height: none; grid-row: 1; }
   .agreement-preview-toolbar { position: static; }
 }
+
+/* Focused preparation: while field tools are open, the editor takes the whole screen. */
+body:has(#agreement-preview:not([hidden]) #agreement-field-editor:not([hidden])) .sidebar,
+body:has(#agreement-preview:not([hidden]) #agreement-field-editor:not([hidden])) .workspace-header,
+body:has(#agreement-preview:not([hidden]) #agreement-field-editor:not([hidden])) .reference-demo,
+body:has(#agreement-preview:not([hidden]) #agreement-field-editor:not([hidden])) .page-heading,
+body:has(#agreement-preview:not([hidden]) #agreement-field-editor:not([hidden])) .workspace-footer,
+body:has(#agreement-preview:not([hidden]) #agreement-field-editor:not([hidden])) .templates-workspace > .section-heading,
+body:has(#agreement-preview:not([hidden]) #agreement-field-editor:not([hidden])) .templates-workspace > .company-workflow,
+body:has(#agreement-preview:not([hidden]) #agreement-field-editor:not([hidden])) #agreement-upload,
+body:has(#agreement-preview:not([hidden]) #agreement-field-editor:not([hidden])) #agreement-library,
+body:has(#agreement-preview:not([hidden]) #agreement-field-editor:not([hidden])) #preparation-progress,
+body:has(#agreement-preview:not([hidden]) #agreement-field-editor:not([hidden])) #agreement-published-versions { display: none !important; }
+body:has(#agreement-preview:not([hidden]) #agreement-field-editor:not([hidden])) .workspace-shell { margin-left: 0; }
+body:has(#agreement-preview:not([hidden]) #agreement-field-editor:not([hidden])) .workspace-main { max-width: none; padding: 16px 24px; }
+body:has(#agreement-preview:not([hidden]) #agreement-field-editor:not([hidden])) .templates-workspace { padding: 0; border: 0; background: transparent; box-shadow: none; }
+body:has(#agreement-preview:not([hidden]) #agreement-field-editor:not([hidden])) #agreement-preview-toolbar { position: sticky; top: 0; z-index: 5; padding: 10px 0; background: var(--canvas); }
+@media (min-width: 901px) {
+  body:has(#agreement-preview:not([hidden]) #agreement-field-editor:not([hidden])) .agreement-preparation-layout { grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr); }
+  body:has(#agreement-preview:not([hidden]) #agreement-field-editor:not([hidden])) .agreement-preparation-layout .agreement-field-editor { top: 72px; max-height: calc(100vh - 88px); }
+}
+
+/* Template page, list mode: a friendly drop zone for new agreements. */
+#agreement-upload { margin: 20px 24px; padding: 28px 24px; border: 2px dashed #bed0e8; border-radius: 16px; background: #fffcf5; text-align: center; transition: border-color .15s ease, background .15s ease; }
+#agreement-upload.is-dragging { border-color: var(--blue); background: var(--blue-soft); }
+#agreement-upload .dropzone-copy { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 12px; color: var(--muted); font-size: 13px; }
+#agreement-upload .dropzone-copy strong { color: var(--ink); font-size: 16px; }
+#agreement-upload .dropzone-icon { display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; margin-bottom: 6px; border-radius: 50%; background: #ffe7bf; color: #b75b0c; }
+#agreement-upload .dropzone-icon .icon { width: 26px; height: 26px; }
+#agreement-upload .agreement-upload-actions { flex-direction: column; justify-content: center; gap: 10px; }
+#agreement-upload .agreement-upload-feedback { text-align: left; }
+#agreement-upload .job-upload-context { text-align: left; margin-bottom: 16px; }
+
+/* Template page, agreement mode: only the document being set up. */
+.templates-workspace:has(#agreement-preview:not([hidden])) :is(#agreement-upload, .company-workflow, .section-heading) { display: none; }
+#agreement-preview:not([hidden]) { display: flex; flex-direction: column; }
+#agreement-preview > .agreement-preview-heading { order: 0; }
+#agreement-preview > #agreement-preview-error { order: 1; }
+#agreement-preview > #preparation-progress { order: 2; }
+#agreement-preview > #agreement-preview-toolbar { order: 3; }
+#agreement-preview > #agreement-page-status { order: 4; }
+#agreement-preview > #agreement-published-versions { order: 5; }
+#agreement-preview > .agreement-preparation-layout { order: 6; }
+#agreement-preview:has(#preparation-progress:not([hidden])) #agreement-version-state { display: none; }
+
+/* Setup card: numbered steps with ticks, status and the next action. */
+#preparation-progress { margin: 0 0 16px; padding: 18px 20px; border: 1px solid #f3d9a8; border-left: 4px solid var(--orange); border-radius: 14px; background: linear-gradient(120deg, #fff4dd, var(--cream) 70%); }
+#preparation-progress ol { counter-reset: prep; gap: 10px 26px; margin-bottom: 14px; }
+#preparation-progress li { counter-increment: prep; color: var(--muted); font-size: 13px; font-weight: 600; }
+#preparation-progress li::before { content: counter(prep); display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid #c7d4e4; border-radius: 50%; background: #fff; color: var(--muted); font-size: 12px; }
+#preparation-progress [data-state="done"] { color: var(--success); }
+#preparation-progress [data-state="done"]::before { content: "\2713"; border-color: #9ccbb0; background: var(--success-soft); color: var(--success); }
+/* Upload is always done first, so the current step is the first pending one after a done step. */
+#preparation-progress [data-state="done"] + [data-state="pending"]::before { border-color: var(--blue); background: var(--blue); color: #fff; }
+#preparation-progress [data-state="done"] + [data-state="pending"] { color: var(--ink); }
+#preparation-progress strong { color: var(--heading-warm, #b75b0c); }
+
+/* Toolbar: a quiet page control group and one clear primary action. */
+#agreement-preview-toolbar { border: 0; padding: 10px 0; }
+#agreement-preview-toolbar .agreement-page-navigation { display: inline-flex; align-items: center; gap: 8px; padding: 4px 6px 4px 12px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--muted); font-size: 12px; }
+#agreement-preview-toolbar .agreement-page-navigation input { width: 54px; min-height: 30px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 999px; text-align: center; }
+#agreement-zoom { border-color: transparent; background: transparent; color: var(--blue); }
+#agreement-zoom:hover { background: var(--blue-soft); }
+#agreement-prepare-toggle { padding: 12px 20px; font-size: 14px; }
+#agreement-preview-toolbar { background: var(--cream); }
+#all-agreements::before { content: "\2190  "; }
+
+/* Editor status: one coloured line, and only the main action that fits the state. */
+.editor-state { margin: 0 0 12px; padding: 10px 14px 10px 36px; border-radius: 10px; position: relative; font-size: 13px; font-weight: 600; line-height: 1.5; }
+.editor-state::before { content: ""; position: absolute; left: 14px; top: 15px; width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+[data-editor-state="unsaved"] .editor-state { color: #88571b; background: #fff2d9; }
+[data-editor-state="blocked"] .editor-state { color: #586a80; background: #f1f3f8; }
+[data-editor-state="ready"] .editor-state, [data-editor-state="saving"] .editor-state, [data-editor-state="publishing"] .editor-state { color: #28569e; background: #e7effd; }
+[data-editor-state="live"] .editor-state { color: #29664c; background: #eaf4ed; }
+.agreement-field-editor:not([data-editor-state="unsaved"]):not([data-editor-state="saving"]) #agreement-fields-save,
+.agreement-field-editor:not([data-editor-state="ready"]):not([data-editor-state="publishing"]) #agreement-publish,
+.agreement-field-editor:not([data-editor-state="live"]) #agreement-create-file,
+.agreement-field-editor #agreement-publish-hint,
+.agreement-field-editor #agreement-fields-status:not(.has-error) { display: none; }
+#agreement-create-file { width: fit-content; }
+
+/* Field editor: placed boxes are coloured by who completes them, with a matching legend. */
+.agreement-field[data-role="company"] { border-color: #c46a0a; background: rgba(255, 236, 204, .9); color: #7a4100; }
+.agreement-field[data-role="preparation"] { border-color: #6b7a90; border-style: dashed; background: rgba(241, 243, 248, .92); color: #3d4b5f; }
+.field-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; width: 100%; margin: 4px 0 0; font-size: 11px; color: var(--muted); }
+.field-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.field-legend span::before { content: ""; width: 12px; height: 12px; border: 2px solid #2e6fb0; border-radius: 3px; background: rgba(224, 240, 255, .86); }
+.field-legend [data-role="company"]::before { border-color: #c46a0a; background: rgba(255, 236, 204, .9); }
+.field-legend [data-role="preparation"]::before { border-color: #6b7a90; border-style: dashed; background: rgba(241, 243, 248, .92); }
+
+/* Add-field chips: data fields in blue, signer marks in warm orange, each with a small symbol. */
+.agreement-field-toolbar .field-add { gap: 6px; padding: 7px 12px; border-radius: 999px; border-color: #bed0e8; background: #fff; color: var(--ink); font-weight: 600; }
+.agreement-field-toolbar .field-add:hover { border-color: var(--blue); background: var(--blue-soft); }
+.agreement-field-toolbar .field-add::before { font-size: 12px; line-height: 1; color: var(--blue); }
+.agreement-field-toolbar .field-add[data-field-type="name"]::before { content: "Aa"; }
+.agreement-field-toolbar .field-add[data-field-type="text"]::before { content: "¶"; }
+.agreement-field-toolbar .field-add[data-field-type="date"]::before { content: "◷"; }
+.agreement-field-toolbar .field-add:is([data-field-type="signature"], [data-field-type="initials"], [data-field-type="acknowledgement"]) { border-color: #f3d9a8; background: #fff8ec; }
+.agreement-field-toolbar .field-add:is([data-field-type="signature"], [data-field-type="initials"], [data-field-type="acknowledgement"]):hover { border-color: #f0a32f; background: #ffefd2; }
+.agreement-field-toolbar .field-add:is([data-field-type="signature"], [data-field-type="initials"], [data-field-type="acknowledgement"])::before { color: #b75b0c; }
+.agreement-field-toolbar .field-add[data-field-type="signature"]::before { content: "✎"; }
+.agreement-field-toolbar .field-add[data-field-type="initials"]::before { content: "AB"; font-size: 10px; font-weight: 800; }
+.agreement-field-toolbar .field-add[data-field-type="acknowledgement"]::before { content: "☑"; }

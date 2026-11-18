@@ -61,7 +61,7 @@
 .draft-footer { padding-top: 25px; color: var(--muted); font-size: 10px; }
 .draft-agreement-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; }
 .draft-agreement-actions .draft-back-link { margin: 0; font-size: 12px; }
-.draft-section select { width: 100%; min-width: 0; min-height: 46px; padding: 11px 12px; border: 0; background: #f8fafd; color: var(--ink); font: inherit; font-size: 13px; }
+.draft-section select { width: 100%; min-width: 0; }
 .draft-section .input-wrap:has(select) { display: block; }
 .draft-setup-summary { margin-top: 22px; }
 .draft-setup-summary h3 { margin: 0 0 9px; font-size: 13px; }
@@ -127,3 +127,29 @@
 .request-options { margin-top: 24px; padding-top: 8px; border-top: 1px solid var(--line); }
 .request-options > summary { min-height: 44px; padding-block: 12px; font-size: 13px; font-weight: 700; color: var(--ink); cursor: pointer; }
 .draft-editor :is(input, select, textarea, summary, #demo-request-heading) { scroll-margin-top: 24px; }
+
+/* Agreement progress: finished steps turn green with a tick. */
+.file-progress li[data-done="true"] { color: var(--success); }
+.file-progress li[data-done="true"] > span { font-size: 0; }
+.file-progress li[data-done="true"] > span::before { content: "✓"; font-size: 13px; }
+.draft-editor:is([data-file-status="cancelled"], [data-file-status="expired"]) .file-progress li { color: var(--muted); }
+
+/* At-a-glance summary of the file setup. */
+.file-summary { margin: 0; padding: 20px 24px; border-bottom: 1px solid var(--line); background: linear-gradient(120deg, #e7effd, var(--cream) 70%); }
+.file-summary-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.file-summary-head h2 { margin: 0; font-size: 16px; }
+.file-summary-head .button { min-height: 36px; padding: 8px 14px; font-size: 12px; }
+.file-summary dl { display: grid; grid-template-columns: minmax(110px, max-content) 1fr; gap: 8px 18px; margin: 0; font-size: 13px; }
+.file-summary dt { color: var(--muted); }
+.file-summary dd { margin: 0; color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
+.file-summary dd.missing { color: #88571b; font-weight: 500; font-style: italic; }
+
+/* Request history: each request as a readable card with tidy signer records. */
+.draft-main > .draft-section { margin: 0 0 20px; padding: 22px 24px; border: 1px solid #e6ddc9; border-radius: 16px; background: var(--cream); box-shadow: var(--card-shadow, none); }
+.draft-main > .draft-section p { margin: 6px 0; color: var(--ink); font-size: 13px; line-height: 1.6; }
+.draft-main > .draft-section p.draft-section-copy { color: var(--muted); font-size: 12px; }
+.draft-main > .draft-section h3 { margin: 20px 0 6px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 15px; }
+.draft-main > .draft-section dl { display: grid; grid-template-columns: minmax(90px, max-content) 1fr; gap: 6px 18px; margin: 10px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font-size: 13px; }
+.draft-main > .draft-section dt { color: var(--muted); }
+.draft-main > .draft-section dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.draft-main > .draft-section a:not(.button) { color: var(--blue); font-weight: 600; text-underline-offset: 3px; }

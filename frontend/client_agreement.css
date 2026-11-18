@@ -1,7 +1,6 @@
 .review-notice { max-width: 75ch; color: var(--ink); font-size: 14px; line-height: 1.75; }
 .review-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 24px 0 12px; }
 .review-controls span, .review-controls label { font-size: 13px; color: var(--muted); }
-.review-controls select { min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font: inherit; }
 .review-viewport { overflow: auto; max-height: 80vh; min-height: 180px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .review-viewport img { display: block; width: 100%; max-width: none; height: auto; }
 .review-controls button { min-height: 44px; }
@@ -72,7 +71,7 @@
 .assistant-about { margin-top: 12px; }
 .assistant-about > summary { min-height: 32px; padding: 6px 0; font-size: 12px; color: var(--muted); cursor: pointer; }
 .signing-form [hidden] { display: none; }
-#signing-field-select { width: 100%; min-height: 44px; margin-top: 8px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--surface); font: inherit; font-size: 14px; }
+#signing-field-select { width: 100%; margin-top: 8px; }
 .signing-form > label[for="signing-field-select"] { display: block; margin-top: 20px; font-size: 13px; }
 #signature-dialog { width: min(520px, calc(100% - 32px)); max-height: calc(100vh - 48px); overflow: auto; padding: 28px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); }
 #signature-dialog::backdrop { background: rgb(16 34 52 / 45%); }
@@ -102,3 +101,12 @@
 .signing-tools > button { margin-top: 12px; }
 .signing-save-state[data-dirty="true"] { color: var(--ink); font-weight: 700; }
 .signing-form :is(input, textarea, button, select) { scroll-margin-block: 100px 24px; }
+
+/* Signing meter: a friendly progress bar above the agreement. */
+.signing-meter { margin: 0 0 22px; padding: 14px 18px; border: 1px solid #e6ddc9; border-radius: 14px; background: var(--cream); box-shadow: var(--card-shadow, none); }
+.signing-meter p { margin: 0 0 10px; color: var(--ink); font-size: 14px; font-weight: 600; }
+.signing-meter-track { height: 10px; overflow: hidden; border-radius: 999px; background: #e7effd; }
+.signing-meter-track span { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--orange), #f0a32f); transition: width .3s ease; }
+.signing-meter[data-ready="true"] { border-color: #cce3d6; background: #f0f8f3; }
+.signing-meter[data-ready="true"] .signing-meter-track span { background: linear-gradient(90deg, #4fae7b, var(--success)); }
+@media (prefers-reduced-motion: reduce) { .signing-meter-track span { transition: none; } }

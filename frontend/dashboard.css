@@ -135,7 +135,7 @@
 .file-search { width: min(100%, 360px); background: #f8fafd; }
 .file-search input { padding-top: 12px; padding-bottom: 12px; font-size: 12px; }
 .sort-control { display: flex; align-items: center; gap: 9px; flex-shrink: 0; color: var(--muted); font-size: 11px; }
-.sort-control select { min-height: 44px; max-width: 150px; padding: 8px 27px 8px 10px; border: 1px solid #bed0e8; border-radius: var(--radius); background: var(--surface); color: var(--ink); font-size: 12px; cursor: pointer; }
+.sort-control select { max-width: 190px; }
 .filter-controls { display: flex; flex-wrap: wrap; gap: 7px; padding: 0 24px 18px; }
 .filter-controls > button { min-height: 38px; padding: 8px 13px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; }
 .filter-controls > button:hover { background: var(--canvas); color: var(--ink); }
@@ -194,7 +194,7 @@
   .overview-columns { grid-template-columns: minmax(0, 1fr); }
   .getting-started { padding: 5px 0 0; }
   .getting-started > .section-heading { padding-top: 0; }
-  .setup-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+  .setup-steps { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px; }
   .setup-steps > li { gap: 10px; }
   .readiness-note { max-width: 70ch; }
   .file-tools { align-items: flex-start; flex-wrap: wrap; gap: 12px; }
@@ -303,3 +303,6 @@
 .file-next-action:hover { color: var(--ink); }
 .file-next-action:focus-visible { outline: 2px solid var(--blue); outline-offset: 4px; }
 @media (max-width: 600px) { .templates-workspace > .company-workflow { margin-inline: 18px; } }
+/* Finished getting-started steps show a green tick. */
+.setup-steps .done .step-number { position: relative; border-color: #9ccbb0; background: var(--success-soft); color: transparent; }
+.setup-steps .done .step-number::after { content: "✓"; position: absolute; color: var(--success); font-weight: 700; }

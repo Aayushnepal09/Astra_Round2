@@ -372,6 +372,16 @@ class SigningController {
       : `${required.length - complete} required ${required.length - complete === 1 ? 'field remains' : 'fields remain'}. Next takes you to an unfinished field.`;
     document.querySelector('#signing-required-progress').textContent = `${complete} of ${required.length} required fields filled`;
     document.querySelector('#review-required-progress').textContent = `${complete} of ${required.length} required fields filled`;
+    // Friendly meter above the document: fills with required fields and turns green when ready to sign.
+    const meter = document.querySelector('#signing-meter');
+    const percent = required.length ? Math.round(complete / required.length * 100) : 100;
+    meter.hidden = recorded;
+    meter.dataset.ready = String(ready);
+    meter.setAttribute('aria-valuenow', String(percent));
+    document.querySelector('#signing-meter-fill').style.width = `${percent}%`;
+    document.querySelector('#signing-meter-label').textContent = ready
+      ? `All ${required.length} required fields done. Confirm your consent, then Sign & submit.`
+      : `Hi ${meter.dataset.name} · ${complete} of ${required.length} required fields done`;
     this.renderMarkers();
     const dirty = !this.state.receipt && (JSON.stringify(this.values()) !== this.savedValues || this.uncertain);
     const saveState = document.querySelector('#signing-save-state');
@@ -444,9 +454,13 @@ class SigningController {
       this.savedValues = JSON.stringify(this.values());
       if (this.state.receipt) {
         this.confirm(this.state);
+        globalThis.showToast?.('Signature recorded');
         this.review.refresh();
       }
-      else this.status.textContent = 'Progress saved. No signature has been recorded.';
+      else {
+        this.status.textContent = 'Progress saved. No signature has been recorded.';
+        globalThis.showToast?.('Progress saved');
+      }
     } catch (error) {
       if (action === 'submit' && (!error.status || error.status >= 500 || error.code === 'already_submitted')) {
         this.uncertain = true;

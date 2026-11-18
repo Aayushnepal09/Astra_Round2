@@ -36,19 +36,36 @@ export class AgreementWorkspace {
 
   element(id) { return document.getElementById(id); }
 
+  chooseFile(file) {
+    this.file = file;
+    this.creationKey = crypto.randomUUID();
+    this.uploadJobId = this.element('agreement-upload-scope')?.value === 'job' ? this.jobId : null;
+    this.element('agreement-upload-filename').textContent = file.name;
+    this.element('agreement-upload-filename').hidden = false;
+    this.upload();
+  }
+
   bindEvents() {
     this.element('agreement-add-to-job').addEventListener('click', () => this.addToJob());
     this.element('choose-agreement').addEventListener('click', () => this.element('agreement-file').click());
     this.element('agreement-file').addEventListener('change', event => {
       const file = event.target.files[0];
-      if (!file) return;
-      this.file = file;
-      this.creationKey = crypto.randomUUID();
-      this.uploadJobId = this.element('agreement-upload-scope')?.value === 'job' ? this.jobId : null;
-      this.element('agreement-upload-filename').textContent = file.name;
-      this.element('agreement-upload-filename').hidden = false;
       event.target.value = '';
-      this.upload();
+      if (file) this.chooseFile(file);
+    });
+    // Dropping a file on the upload area uses the same path as Browse files.
+    const zone = this.element('agreement-upload');
+    zone.addEventListener('dragover', event => {
+      if (this.element('choose-agreement').disabled || !event.dataTransfer?.types.includes('Files')) return;
+      event.preventDefault();
+      zone.classList.add('is-dragging');
+    });
+    zone.addEventListener('dragleave', event => { if (!zone.contains(event.relatedTarget)) zone.classList.remove('is-dragging'); });
+    zone.addEventListener('drop', event => {
+      event.preventDefault();
+      zone.classList.remove('is-dragging');
+      const file = event.dataTransfer?.files[0];
+      if (file && !this.element('choose-agreement').disabled) this.chooseFile(file);
     });
     this.element('retry-agreement-upload').addEventListener('click', () => this.upload());
     this.element('retry-agreement-list').addEventListener('click', () => this.loadList());
@@ -79,10 +96,11 @@ export class AgreementWorkspace {
       const editor = this.element('agreement-field-editor');
       const visible = editor.hidden;
       editor.hidden = !visible;
-      this.element('agreement-prepare-toggle').textContent = visible ? 'Hide field tools' : 'Prepare fields';
+      this.element('agreement-prepare-toggle').textContent = visible ? 'Close editor' : 'Prepare fields';
+      this.element('agreement-prepare-toggle').classList.toggle('secondary', visible);
       this.element('agreement-prepare-toggle').setAttribute('aria-expanded', String(visible));
       this.renderFields();
-      if (visible) { editor.scrollTop = 0; this.element('agreement-ai-fields').scrollIntoView({ block: 'start' }); }
+      if (visible) { editor.scrollTop = 0; window.scrollTo({ top: 0, behavior: 'instant' }); this.element('agreement-ai-fields').scrollIntoView({ block: 'nearest' }); }
     });
     this.element('agreement-field-editor').addEventListener('click', event => {
       const add = event.target.closest('.field-add');
@@ -421,6 +439,7 @@ export class AgreementWorkspace {
       this.element('agreement-prepare-toggle').hidden = published;
       this.element('agreement-field-editor').hidden = true;
       this.element('agreement-prepare-toggle').textContent = 'Prepare fields';
+      this.element('agreement-prepare-toggle').classList.remove('secondary');
       this.element('agreement-prepare-toggle').setAttribute('aria-expanded', 'false');
       this.element('agreement-page-viewport').classList.remove('is-enlarged');
       this.element('agreement-zoom').textContent = 'Enlarge page';
@@ -554,6 +573,7 @@ export class AgreementWorkspace {
       element.type = 'button';
       element.className = 'agreement-field';
       element.dataset.fieldId = field.id;
+      element.dataset.role = field.role;
       element.setAttribute('aria-pressed', String(field.id === this.selectedFieldId));
       element.title = `${field.label || field.type} · ${field.role} · placeholder`;
       element.textContent = `${field.label || field.type}${field.required ? ' *' : ''}`;
@@ -667,6 +687,7 @@ export class AgreementWorkspace {
     button.disabled = true;
     this.element('agreement-fields-status').textContent = 'Saving field draft…';
     this.element('agreement-fields-status').classList.remove('has-error');
+    this.updatePublicationControls();
     try {
       const response = await fetch(this.url(`${this.agreement.id}/fields/`), {
         method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: {
@@ -698,6 +719,7 @@ export class AgreementWorkspace {
         : this.agreement.jobId ? 'Saved draft. Save a ready agreement, then add it to this job.' : 'Saved draft. Publish a version to use these fields on client files.';
       this.renderFields();
       this.renderVersions();
+      globalThis.showToast?.('Draft saved');
     } catch (error) {
       if (session !== this.fieldSession || this.agreement?.id !== agreementId) return;
       if (this.handleSession(error)) return;
@@ -739,6 +761,23 @@ export class AgreementWorkspace {
     this.element('agreement-publish-hint').textContent = this.fieldsDirty || this.fieldsSaving
       ? 'Save your draft changes before publishing.'
       : prepared ? 'Ready to use. Review and issue a signing request from the client’s job.' : issues.length ? issues.join(' ') : 'Creates a ready, fixed version. You will review the recipient before sending.';
+    this.renderEditorState(issues, latest, prepared);
+  }
+
+  // One status line drives which main action the editor shows: save, publish, or use the live version.
+  renderEditorState(issues, latest, prepared) {
+    const next = (latest?.number || 0) + 1;
+    const missing = `${issues.length} thing${issues.length === 1 ? '' : 's'} missing: ${issues.join(' ')}`;
+    const [state, text] = this.publishedView ? ['live', 'Published version · read only.']
+      : this.publishing ? ['publishing', `Publishing version ${next}…`]
+      : this.fieldsSaving ? ['saving', 'Saving draft…']
+      : this.fieldsDirty ? ['unsaved', 'Unsaved changes. Save your draft to keep them.']
+      : prepared ? ['live', `Version ${latest.number} is live and ready to use for clients.`]
+      : issues.length ? ['blocked', `Draft saved · ${missing}`]
+      : ['ready', `Draft saved · ready to publish as version ${next}.`];
+    this.element('agreement-field-editor').dataset.editorState = state;
+    this.element('editor-state').textContent = text;
+    if (!this.publishing && state === 'ready') this.element('agreement-publish').textContent = `Publish version ${next}`;
   }
 
   async addToJob() {
@@ -817,6 +856,7 @@ export class AgreementWorkspace {
       this.agreement.readyVersion = payload.version;
       this.element('published-template-count').textContent = `${payload.publishedCount} published versions`;
       this.renderVersions();
+      globalThis.showToast?.(`Version ${payload.version.number} published`);
       this.element('agreement-publish-status').textContent = this.agreement.jobId
         ? `Ready: ${payload.version.name}, Version ${payload.version.number}. Available for this job only. Select Add latest ready version to this job to continue.`
         : `Published ${payload.version.name}, Version ${payload.version.number}. This snapshot can now be selected for client files.${this.fieldsDirty ? ' Newer draft changes are still unsaved.' : ''}`;

@@ -108,6 +108,8 @@ export class ClientDirectory {
         row = this.clientRow(selectedClient.client);
         this.list.prepend(row);
       }
+      // A single result (e.g. after a search) opens straight to its jobs.
+      if (!row && this.list.children.length === 1) row = this.list.firstElementChild;
       if (row) row.open = true;
     } catch (error) {
       if (request === this.requestNumber) { this.status.textContent = error.message; retry.hidden = false; }
@@ -159,7 +161,7 @@ export class ClientDirectory {
       if (page === 1) {
         content.replaceChildren();
         const create = node('details', '', 'client-create-job');
-        create.append(node('summary', 'New job / file'), this.jobForm(client, content));
+        create.append(node('summary', '+ Start a new job for this client'), this.jobForm(client, content));
         create.open = !!client.startJob;
         content.append(create);
         if (!result.total) content.append(node('p', 'No jobs yet. Create a job/file, then select prepared agreements or upload a document.', 'field-hint client-empty'));
@@ -209,7 +211,7 @@ export class ClientDirectory {
     this.input(fields, 'Job / file title', 'title', 200);
     fields.append(this.versionPicker(document.body.dataset.templatesUrl));
     fields.append(node('p', 'Choose agreements now, or create the job first and upload a document. Nothing is issued automatically.', 'field-hint'));
-    const button = node('button', 'Create job & agreement drafts', 'button');
+    const button = node('button', 'Create job', 'button');
     button.type = 'submit';
     fields.append(button);
     form.addEventListener('submit', event => {
@@ -276,9 +278,9 @@ export class ClientDirectory {
     row.append(table.root);
     row.addEventListener('toggle', () => { if (row.open) table.refresh(); });
     const actions = node('div', '', 'job-actions');
-    actions.append(link('Upload a new agreement', job.uploadUrl, 'button secondary'));
+    actions.append(link('Upload a new agreement for this job', job.uploadUrl, 'button secondary'));
     const add = node('details', '', 'job-add-agreements');
-    add.append(node('summary', 'Add prepared agreements'));
+    add.append(node('summary', '+ Add a prepared agreement to this job'));
     const { form, fields } = this.form();
     fields.append(this.versionPicker(job.templatesUrl));
     const button = node('button', 'Add agreement drafts', 'button');

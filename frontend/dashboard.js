@@ -1,6 +1,6 @@
 import { SessionClient } from './shared/ui.js';
-import { AgreementWorkspace } from './agreements.js?v=workflow2';
-import { ClientDirectory } from './client_workspace.js?v=countersign1';
+import { AgreementWorkspace } from './agreements.js?v=ui22';
+import { ClientDirectory } from './client_workspace.js?v=login1';
 
 class WorkspaceDashboard {
   static views = new Map([
@@ -227,6 +227,33 @@ class WorkspaceDashboard {
     document.querySelectorAll('[data-count]').forEach(element => { element.textContent = this.counts[element.dataset.count]; });
     this.renderRows(document.querySelector('#recent-file-rows'), this.recentFiles);
     document.querySelector('#recent-empty').hidden = this.recentFiles.length > 0;
+    this.renderProgress();
+  }
+
+  // Overview guidance follows the live counts: tick finished steps and point the welcome card at the next job.
+  renderProgress() {
+    const { all = 0, draft = 0, waiting = 0, ready = 0, attention = 0 } = this.counts || {};
+    const done = { template: all > 0, file: all > 0, sent: all - draft > 0, signed: ready > 0 };
+    let currentFound = false;
+    document.querySelectorAll('[data-step]').forEach(step => {
+      const finished = done[step.dataset.step];
+      step.classList.toggle('done', finished);
+      step.classList.toggle('current', !finished && !currentFound);
+      if (!finished) currentFound = true;
+    });
+    const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
+    const card = !all ? null
+      : attention ? [`${plural(attention, 'agreement')} need${attention === 1 ? 's' : ''} you.`, 'Company signatures, missing details or processing are waiting for your action.', 'Review them', 'attention']
+      : waiting ? [`Waiting on ${plural(waiting, 'client signature')}.`, 'Share the signing link and code with the client, then check back here.', 'See who is waiting', 'waiting']
+      : ['Everything is signed and saved.', 'Start the next client agreement whenever you are ready.', 'Start a new client agreement', null];
+    if (!card) return;
+    document.querySelector('.setup-footnote').hidden = true;
+    const action = document.querySelector('#setup-action');
+    document.querySelector('#setup-title').textContent = card[0];
+    document.querySelector('#setup-copy').textContent = card[1];
+    document.querySelector('#setup-action-label').textContent = card[2];
+    if (card[3]) { action.href = '#files'; action.removeAttribute('data-view'); action.dataset.filterLink = card[3]; }
+    else { action.href = '#clients'; action.dataset.view = 'clients'; delete action.dataset.filterLink; }
   }
 
   timestamp(file) {

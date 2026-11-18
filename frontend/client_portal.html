@@ -1,16 +1,16 @@
 {% extends "shared/base.html" %}
 {% block title %}Agreements · Astra{% endblock %}
 {% block resources %}
-<link rel="stylesheet" href="{{ static_prefix }}dashboard.css?v=ui5">
-<link rel="stylesheet" href="{{ static_prefix }}reference.css?v=reference2">
-<link rel="stylesheet" href="{{ static_prefix }}client_portal.css?v=shared1">
+<link rel="stylesheet" href="{{ static_prefix }}dashboard.css?v=ui24">
+<link rel="stylesheet" href="{{ static_prefix }}reference.css?v=ui24">
+<link rel="stylesheet" href="{{ static_prefix }}client_portal.css?v=ui24">
 <script type="module" src="{{ static_prefix }}client_portal.js?v=shared1"></script>
 {% endblock %}
 {% block body_attributes %}class="dashboard reference-ui enhanced" data-logout-url="{{ logout_url }}" data-login-url="{{ login_url }}"{% endblock %}
 {% block content %}
 <a class="skip-link" href="#workspace-main">Skip to my agreement</a>
 <aside class="sidebar" aria-label="Client portal navigation">
-  <div class="sidebar-heading"><a class="brand" href="{{ portal_url }}"><span class="reference-logo"><svg aria-hidden="true"><use href="#icon-check"/></svg></span>astra</a><button id="portal-menu" class="menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="workspace-navigation"><svg class="icon" aria-hidden="true"><use href="#icon-menu"/></svg></button></div>
+  <div class="sidebar-heading"><a class="brand" href="{{ portal_url }}"><svg aria-hidden="true"><use href="#astra-mark"/></svg>astra<span class="brand-dot">.</span></a><button id="portal-menu" class="menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="workspace-navigation"><svg class="icon" aria-hidden="true"><use href="#icon-menu"/></svg></button></div>
   <div class="sidebar-content" id="workspace-navigation"><div class="workspace-identity"><span class="workspace-avatar">{{ client_name|first|upper }}</span><div><strong>{{ client_name }}</strong><span>Client portal</span></div></div>
     <nav class="main-navigation" aria-label="Your space"><a class="nav-link" href="{{ portal_url }}" data-portal-view="jobs" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#icon-document"/></svg>Agreements</a></nav>
     <div class="sidebar-bottom"><div class="sidebar-note"><strong>{{ company_name }}</strong><p>Your service provider. For questions about the job, contact them through your usual channel.</p></div><span class="workspace-private"><svg class="icon" aria-hidden="true"><use href="#icon-shield"/></svg>Verified invitation access</span></div>

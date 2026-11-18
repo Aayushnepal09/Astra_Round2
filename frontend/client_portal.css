@@ -9,3 +9,5 @@
 .reference-ui .portal-empty .text-link { display:block; margin-top:12px; color:var(--blue); }
 .reference-ui .files-workspace .portal-empty { padding:32px 24px; }
 @media(max-width:800px) { .reference-ui .portal-search > #portal-refresh { margin-left:0; } .reference-ui .portal-filters { overflow:auto; flex-wrap:nowrap; } .reference-ui .portal-empty { width:100%; } }
+/* Room for the portal's action buttons. */
+.reference-ui .files-workspace th:last-child { width: 200px; }

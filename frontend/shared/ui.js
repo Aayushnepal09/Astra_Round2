@@ -42,3 +42,20 @@ export class SessionClient {
     return result;
   }
 }
+
+// Short success confirmation in the corner; callers use globalThis.showToast?.() so tests and pages without it are unaffected.
+globalThis.showToast = message => {
+  let region = document.querySelector('#toast-region');
+  if (!region) {
+    region = document.createElement('div');
+    region.id = 'toast-region';
+    region.setAttribute('role', 'status');
+    region.setAttribute('aria-live', 'polite');
+    document.body.append(region);
+  }
+  const toast = document.createElement('p');
+  toast.className = 'toast';
+  toast.textContent = message;
+  region.append(toast);
+  setTimeout(() => toast.remove(), 3600);
+};

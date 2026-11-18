@@ -1,3 +1,52 @@
+/* Client and job lists (was clients.css). */
+.client-directory { padding-bottom: 24px; }
+.client-directory .section-heading > .button { flex-shrink: 0; white-space: nowrap; }
+.client-search, #client-directory-status, #clients-retry, .new-client-details, .client-list, .client-pagination { margin-inline: 28px; }
+.client-search { margin-block: 24px 12px; max-width: 540px; }
+.client-search label, .client-setup-form label:not(.version-choice) { display: block; font-size: 13px; font-weight: 700; line-height: 1.6; }
+.client-search input, .client-setup-form input:not([type="checkbox"]), #agreement-upload-scope { display: block; width: 100%; min-width: 0; min-height: 44px; padding: 11px 12px; margin: 8px 0 18px; border: 1px solid #bed0e8; border-radius: 6px; color: var(--ink); background: var(--surface); font: inherit; font-size: 14px; }
+.client-search input:focus-visible, .client-setup-form input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.client-list { margin-top: 20px; }
+.client-row { border-top: 1px solid var(--line); }
+.client-row > summary { display: list-item; position: relative; padding: 20px 12px 20px 4px; font-size: 14px; cursor: pointer; }
+.client-identity { display: inline-flex; flex-direction: column; gap: 5px; vertical-align: middle; max-width: 100%; overflow-wrap: anywhere; }
+.client-identity strong { color: var(--ink); font-size: 16px; }
+.client-identity > span, .client-counts { color: var(--muted); font-size: 12px; line-height: 1.7; }
+.client-counts { display: block; padding-left: 16px; margin-top: 8px; }
+.client-content { margin: 0 0 24px 16px; padding-left: 20px; border-left: 1px solid var(--line); }
+.client-content > .field-hint { margin-block: 16px; }
+.client-job { margin-top: 12px; border-top: 1px solid var(--line); }
+.client-job > summary { min-height: 44px; padding: 16px 0; color: var(--ink); font-size: 14px; font-weight: 700; cursor: pointer; overflow-wrap: anywhere; }
+.job-agreements { padding: 0; margin: 0 0 16px; list-style: none; }
+.job-agreements li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.job-agreements .file-name { font-size: 14px; overflow-wrap: anywhere; }
+.job-agreements .status-badge { flex-shrink: 0; }
+.job-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-block: 16px; }
+.client-setup-form { max-width: 680px; padding-block: 16px; }
+.client-setup-form fieldset { min-width: 0; padding: 0; margin: 0; border: 0; }
+.client-setup-form fieldset > .button { margin-top: 18px; }
+.client-setup-form summary, .new-client-details > summary, .client-create-job > summary, .job-add-agreements > summary { min-height: 44px; padding-block: 12px; color: var(--ink); font-size: 13px; font-weight: 700; cursor: pointer; }
+.version-picker { margin-top: 8px; }
+.version-choice { display: flex; align-items: flex-start; gap: 10px; padding: 14px 0; border-bottom: 1px solid var(--line); color: var(--ink); font-size: 13px; line-height: 1.7; }
+.version-choice input { flex-shrink: 0; width: 20px; height: 20px; accent-color: var(--blue); }
+.version-choice span { flex: 1; overflow-wrap: anywhere; }
+.version-choice a { min-height: 28px; font-size: 12px; }
+.client-pagination { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 20px; font-size: 13px; }
+.agreement-index { margin-top: 28px; }
+.agreement-index > summary { min-height: 44px; padding: 16px 0; color: var(--muted); font-size: 14px; font-weight: 700; cursor: pointer; }
+.job-upload-context { padding: 18px 28px; margin: 0; background: var(--blue-soft); }
+.job-upload-context p { font-size: 13px; line-height: 1.7; margin: 0 0 12px; }
+.job-upload-context label { display: block; max-width: 480px; font-size: 13px; font-weight: 700; }
+.client-directory :focus-visible { outline-offset: 3px; }
+@media (max-width: 600px) {
+  .client-search, #client-directory-status, #clients-retry, .new-client-details, .client-list, .client-pagination { margin-inline: 18px; }
+  .client-content { margin-left: 4px; padding-left: 14px; }
+  .job-agreements li { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .client-setup-form input:not([type="checkbox"]) { font-size: 16px; }
+  .client-pagination { flex-wrap: wrap; }
+  .job-upload-context { padding: 18px; }
+}
+
 :root {
   --ink: #25344b;
   --muted: #566477;
@@ -74,17 +123,18 @@
 .preparation-complete h3 { margin: 0 0 7px; font-size: 20px; }
 .preparation-complete p { margin: 0; font-size: 13px; line-height: 1.65; }
 .preparation-complete > .button { flex-shrink: 0; }
-.agreement-ai-fields { padding: 18px; border: 1px solid #ddd5ed; border-radius: 12px; background: #f8f6fd; }
-.agreement-ai-fields h3 { color: #4b397e; font-size: 17px; }
-.button.ai-button { color: #fff; border-color: #6550a1; background: #6550a1; }
-.button.ai-button:hover { background: #514083; border-color: #514083; }
+.agreement-ai-fields { padding: 18px; border: 1px solid #f3d9a8; border-radius: 12px; background: var(--cream); }
+.agreement-ai-fields h3 { color: #b75b0c; font-size: 17px; }
+/* Orange marks AI help, matching the login accent; disabled keeps the standard grey. */
+.reference-ui .button.ai-button:not(.secondary):not(.danger):not(:disabled) { color: var(--ink); border-color: #f0a32f; background: var(--orange); }
+.reference-ui .button.ai-button:not(.secondary):not(.danger):not(:disabled):hover { background: #f0a32f; }
 #agreement-suggestion-list { list-style: none; padding: 0; gap: 12px; margin-top: 18px; }
-#agreement-suggestion-list > li { padding: 16px; border: 1px solid #ded9e9; border-radius: 10px; background: #fff; }
+#agreement-suggestion-list > li { padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
 #agreement-suggestion-list > li[data-added="true"] { border-color: #bbd7c6; }
 #agreement-suggestion-list > li[data-added="true"] .agreement-suggestion-feedback { color: #286345; }
 .agreement-suggestion-actions .button { padding: 8px 12px; font-size: 12px; }
 .agreement-suggestion-confirm { padding: 12px; border: 1px solid #e6b9b4; border-radius: 8px; background: #fff6f5; }
-.agreement-assistant { background: #faf9fd; border-color: #ddd7eb; }
+.agreement-assistant { background: var(--cream); border-color: var(--line); }
 #cancel-request { margin-block: 12px; }
 [hidden] { display: none !important; }
 @media (max-width: 760px) {
@@ -110,3 +160,33 @@
 .preparation-action-bar .agreement-publish-controls { margin-top: 0; }
 .preparation-action-bar p:empty { display: none; }
 .preparation-action-bar .agreement-save-actions { justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+/* Client signing navigation (was review_sidebar.css). */
+/* Navigation only: retain the current signing controls and document behaviour. */
+.signing-with-nav .review-sidebar { position:fixed; inset:0 auto 0 0; z-index:30; width:232px; display:flex; flex-direction:column; padding:28px 16px 20px; border-right:1px solid var(--line); background:white; overflow:auto; }
+.review-sidebar > .brand { padding:0 10px; }
+.review-nav-identity { padding:14px 12px; margin:34px 0 24px; border:1px solid var(--line); border-radius:8px; background:#fafbfe; overflow-wrap:anywhere; }
+.review-nav-identity strong,.review-nav-identity > span { display:block; }
+.review-nav-identity strong { font-size:13px; font-weight:600; }
+.review-nav-identity > span { margin-top:5px; color:var(--muted); font-size:11px; }
+.review-sidebar-nav { display:grid; gap:7px; }
+.review-sidebar-nav a { display:flex; align-items:center; gap:11px; min-height:44px; padding:11px 12px; border-radius:7px; color:var(--ink); font-size:13px; text-decoration:none; }
+.review-sidebar-nav a:hover { background:#f8f7fc; }
+.review-sidebar-nav a[aria-current=page] { color:var(--blue); background:var(--blue-soft); }
+.review-sidebar-nav .icon { width:19px; height:19px; }
+.review-sidebar-footer { margin-top:auto; padding:20px 12px 0; color:var(--muted); font-size:11px; }
+.review-sidebar-footer strong,.review-sidebar-footer span { display:block; margin-top:6px; }
+.signing-with-nav .draft-header { margin-left:232px; padding-inline:24px; }
+.signing-with-nav .draft-header .draft-back-link { margin-left:auto; margin-right:0; white-space:nowrap; }
+.review-breadcrumb { display:flex; align-items:center; gap:12px; color:var(--muted); font-size:12px; }
+.review-breadcrumb strong { color:var(--ink); font-weight:500; }
+.signing-with-nav .draft-main { max-width:1440px; margin-left:232px; margin-right:0; padding-inline:24px; }
+@media(min-width:951px) and (max-width:1150px) { .signing-with-nav .signing-layout,.signing-with-nav .signing-layout:has(.signing-helper-rail) { grid-template-columns:220px minmax(0,1fr); gap:20px; } .signing-with-nav .signing-form { padding:18px; } .signing-with-nav .draft-header { gap:16px; } .signing-with-nav .review-breadcrumb { display:none; } }
+@media(max-width:950px) { .signing-with-nav .review-sidebar { position:static; width:auto; padding:16px 20px 12px; border-right:0; border-bottom:1px solid var(--line); } .review-sidebar > .brand { padding:0; font-size:25px; } .review-nav-identity,.review-sidebar-footer { display:none; } .review-sidebar-nav { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; } .review-sidebar-nav a { padding:9px 11px; font-size:12px; } .review-sidebar-nav .icon { width:17px; height:17px; } .signing-with-nav .draft-header { margin-left:0; padding-inline:20px; min-height:64px; } .signing-with-nav .draft-main { margin-left:auto; margin-right:auto; padding-inline:20px; } }
+@media(max-width:480px) { .signing-with-nav .draft-header { flex-wrap:nowrap; gap:12px; } .signing-with-nav .review-breadcrumb { display:none; } .signing-with-nav .draft-header .draft-back-link { order:0; flex-basis:auto; margin-left:0; } .review-sidebar-nav a[aria-current=page] { display:none; } }
+
+.client-signed-preview { padding:18px 20px; margin:0 0 20px; border:1px solid #dfd5b6; border-radius:9px; background:#fffaf0; color:var(--ink); }
+.client-signed-preview strong { display:block; margin-bottom:8px; font-size:15px; }
+.client-signed-preview p { margin:5px 0; color:var(--muted); font-size:12px; line-height:1.7; }
+
+.client-signed-preview[data-complete="true"] { border-color:#cce3d6; background:#f0f8f3; }
