@@ -96,8 +96,12 @@ class ClientLogin(View):
             if set(payload) != {"code"} or not isinstance(code, str) or re.fullmatch(r"[0-9]{6}", code) is None:
                 return _invalid_code()
             if not check_password(code, invitation.code_hash):
-                if bound and ClientInvitation.objects.filter(pk=invitation.pk, attempts__gte=settings.CLIENT_MAX_ATTEMPTS).exists():
-                    return auth_error("This code is locked after unsuccessful attempts. Ask the company for a replacement code.", status=429)
+                if bound:
+                    attempts = ClientInvitation.objects.filter(pk=invitation.pk).values_list("attempts", flat=True).first() or 0
+                    if attempts >= settings.CLIENT_MAX_ATTEMPTS:
+                        return auth_error("This code is locked after unsuccessful attempts. Ask the company for a replacement code.", status=429)
+                    left = settings.CLIENT_MAX_ATTEMPTS - attempts
+                    return auth_error(f"That code didn’t match. Check it and try again; {left} attempt{'s' if left != 1 else ''} left before it locks.", status=401)
                 return _invalid_code()
             redeemed = _available(invitation_id, invitation.code_hash).filter(
                 attempts__lte=settings.CLIENT_MAX_ATTEMPTS

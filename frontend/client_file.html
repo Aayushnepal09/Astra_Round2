@@ -1,9 +1,9 @@
 {% extends "shared/base.html" %}
 {% block title %}{% if is_new %}New client file{% else %}{{ draft_data.clientName }}{% endif %} · Astra{% endblock %}
 {% block resources %}
-  <link rel="stylesheet" href="{{ static_prefix }}client_file.css?v=ui26">
-  <script type="module" src="{{ static_prefix }}client_file.js?v=ui26"></script>
-  <link rel="stylesheet" href="{{ static_prefix }}workflow.css?v=ui26">
+  <link rel="stylesheet" href="{{ static_prefix }}client_file.css?v=ui32">
+  <script type="module" src="{{ static_prefix }}client_file.js?v=ui31"></script>
+  <link rel="stylesheet" href="{{ static_prefix }}workflow.css?v=ui32">
 {% endblock %}
 {% block body_attributes %}class="draft-editor" data-save-url="{{ save_url }}" data-session-url="{{ session_url }}" data-login-url="{{ login_url }}" data-company-id="{{ company_id }}" data-templates-url="{{ templates_url }}" data-request-url="{{ request_url }}"{% endblock %}
 {% block content %}
@@ -95,6 +95,7 @@
           <h2 id="demo-request-heading">Review &amp; issue</h2>
           <p class="draft-section-copy" id="demo-send-hint">Save the selected version and signer details first. Issuing a request freezes these details.</p>
           <button class="button" id="send-demo" type="button" disabled>Send to client</button>
+          <a class="button" id="company-countersign" hidden>Review &amp; countersign</a>
           <div id="demo-invitation" hidden><button class="button" type="button" id="invitation-open">View invitation link &amp; code</button></div>
           <button class="button secondary danger" id="cancel-request" type="button" hidden>Cancel request</button>
           <button class="button" id="prepare-replacement" type="button" hidden>Prepare replacement</button>
@@ -103,7 +104,6 @@
           <p class="field-hint" id="request-deadline" hidden></p>
           <p id="demo-status" class="field-hint" role="status" aria-live="polite"></p>
           <p id="demo-error" class="field-error" role="alert" hidden></p>
-          <a class="button" id="company-countersign" hidden>Review &amp; countersign</a>
           <section id="file-completion" aria-labelledby="completion-heading" hidden>
             <h3 id="completion-heading">Final agreement</h3>
             <p id="completion-status" class="field-hint" role="status" aria-live="polite"></p>

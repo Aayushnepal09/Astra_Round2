@@ -164,8 +164,8 @@ body:has(#agreement-preview:not([hidden]) #agreement-field-editor:not([hidden]))
 #agreement-preview > #preparation-progress { order: 2; }
 #agreement-preview > #agreement-preview-toolbar { order: 3; }
 #agreement-preview > #agreement-page-status { order: 4; }
-#agreement-preview > #agreement-published-versions { order: 5; }
-#agreement-preview > .agreement-preparation-layout { order: 6; }
+#agreement-preview > .agreement-preparation-layout { order: 5; }
+#agreement-preview > #agreement-published-versions { order: 6; }
 #agreement-preview:has(#preparation-progress:not([hidden])) #agreement-version-state { display: none; }
 
 /* Setup card: numbered steps with ticks, status and the next action. */
@@ -197,8 +197,7 @@ body:has(#agreement-preview:not([hidden]) #agreement-field-editor:not([hidden]))
 [data-editor-state="blocked"] .editor-state { color: #586a80; background: #f1f3f8; }
 [data-editor-state="ready"] .editor-state, [data-editor-state="saving"] .editor-state, [data-editor-state="publishing"] .editor-state { color: #28569e; background: #e7effd; }
 [data-editor-state="live"] .editor-state { color: #29664c; background: #eaf4ed; }
-.agreement-field-editor:not([data-editor-state="unsaved"]):not([data-editor-state="saving"]) #agreement-fields-save,
-.agreement-field-editor:not([data-editor-state="ready"]):not([data-editor-state="publishing"]) #agreement-publish,
+.agreement-field-editor[data-editor-state="live"] #agreement-publish,
 .agreement-field-editor:not([data-editor-state="live"]) #agreement-create-file,
 .agreement-field-editor #agreement-publish-hint,
 .agreement-field-editor #agreement-fields-status:not(.has-error) { display: none; }
@@ -226,3 +225,20 @@ body:has(#agreement-preview:not([hidden]) #agreement-field-editor:not([hidden]))
 .agreement-field-toolbar .field-add[data-field-type="signature"]::before { content: "✎"; }
 .agreement-field-toolbar .field-add[data-field-type="initials"]::before { content: "AB"; font-size: 10px; font-weight: 800; }
 .agreement-field-toolbar .field-add[data-field-type="acknowledgement"]::before { content: "☑"; }
+
+/* Setup card action sits under the status text; the editor's Save stays visible but greyed when there is nothing to save. */
+#preparation-action { margin-top: 14px; }
+#agreement-fields-save:disabled { opacity: .7; }
+#agreement-preview > #agreement-published-versions { margin-top: 20px; }
+
+/* "To publish" checklist: what blocks a ready version, each with a quick fix. */
+.publish-checklist { margin: 0 0 12px; padding: 12px 14px; border: 1px solid #f3d9a8; border-radius: 10px; background: #fff8ec; font-size: 13px; }
+.publish-checklist strong { display: block; margin-bottom: 6px; color: #88571b; }
+.publish-checklist ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.publish-checklist li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--ink); }
+.publish-checklist li .button { margin-left: auto; }
+.publish-checklist li::before { content: "\2022"; color: #b75b0c; margin-right: -2px; }
+.publish-checklist .button { min-height: 32px; padding: 6px 12px; font-size: 12px; }
+#agreement-publish:disabled { opacity: .6; }
+
+#agreement-suggestions-add-all { margin: 10px 0 4px; }

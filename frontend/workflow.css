@@ -190,3 +190,10 @@
 .client-signed-preview p { margin:5px 0; color:var(--muted); font-size:12px; line-height:1.7; }
 
 .client-signed-preview[data-complete="true"] { border-color:#cce3d6; background:#f0f8f3; }
+
+/* Banner on Clients while a chosen template is waiting to be sent. */
+.use-version-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 16px; padding: 12px 16px; border: 1px solid #f3d9a8; border-left: 4px solid var(--orange); border-radius: 12px; background: #fff8ec; font-size: 13px; }
+.use-version-banner p { margin: 0; color: var(--ink); line-height: 1.5; }
+.use-version-banner .button { min-height: 32px; padding: 6px 12px; font-size: 12px; flex-shrink: 0; }
+
+.older-toggle { min-height: 32px; margin-top: 8px; padding: 6px 12px; font-size: 12px; }

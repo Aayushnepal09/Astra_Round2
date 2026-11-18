@@ -110,3 +110,7 @@
 .signing-meter[data-ready="true"] { border-color: #cce3d6; background: #f0f8f3; }
 .signing-meter[data-ready="true"] .signing-meter-track span { background: linear-gradient(90deg, #4fae7b, var(--success)); }
 @media (prefers-reduced-motion: reduce) { .signing-meter-track span { transition: none; } }
+
+/* The progress meter above the document replaces the two text counters; they stay for screen readers. */
+#signing-required-progress, #review-required-progress { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (min-width: 951px) { #review-next-required { display: none; } }

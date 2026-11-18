@@ -39,6 +39,7 @@ export class ClientDirectory {
     window.addEventListener('beforeunload', event => {
       if (this.dirtyForms.size) { event.preventDefault(); event.returnValue = ''; }
     });
+    document.querySelector('#use-version-clear').addEventListener('click', () => this.clearChosenVersion());
     document.querySelector('#new-client-toggle').addEventListener('click', () => {
       document.querySelector('#new-client-details').open = true;
       this.newClientForm.elements.name.focus();
@@ -73,9 +74,28 @@ export class ClientDirectory {
     return result;
   }
 
-  show() { if (!this.loaded) this.load(); }
+  show() { this.renderChosenVersion(); if (!this.loaded) this.load(); }
+
+  chosenVersion() {
+    try { return JSON.parse(sessionStorage.getItem('astra.useVersion')) || null; } catch { return null; }
+  }
+
+  renderChosenVersion() {
+    const banner = document.querySelector('#use-version-banner');
+    const chosen = this.chosenVersion();
+    banner.hidden = !chosen;
+    if (!chosen) return;
+    const text = banner.querySelector('p');
+    text.replaceChildren('Choose a client for ', node('strong', chosen.label), '. Open the client and start a job; this agreement will already be ticked.');
+  }
+
+  clearChosenVersion() {
+    try { sessionStorage.removeItem('astra.useVersion'); } catch {}
+    this.renderChosenVersion();
+  }
 
   async load() {
+    this.renderChosenVersion();
     const editing = [...this.dirtyForms].filter(form => form !== this.newClientForm && this.list.contains(form));
     if (editing.length && !window.confirm('Discard the unsaved job or agreement selections before reloading the client list?')) return;
     editing.forEach(form => this.dirtyForms.delete(form));
@@ -162,7 +182,9 @@ export class ClientDirectory {
         content.replaceChildren();
         const create = node('details', '', 'client-create-job');
         create.append(node('summary', '+ Start a new job for this client'), this.jobForm(client, content));
-        create.open = !!client.startJob;
+        // Opening the job form also opens its agreement list, so the choice is never hidden.
+        create.addEventListener('toggle', () => { if (create.open) create.querySelector('.version-picker').open = true; });
+        create.open = !!client.startJob || !!this.chosenVersion();
         content.append(create);
         if (!result.total) content.append(node('p', 'No jobs yet. Create a job/file, then select prepared agreements or upload a document.', 'field-hint client-empty'));
       } else status.remove();
@@ -221,6 +243,7 @@ export class ClientDirectory {
         reference: form.elements.reference.value, title: form.elements.title.value,
         versions: [...form.querySelectorAll('[name="versions"]:checked')].map(input => input.value),
       }, result => {
+        if (form.querySelector(`[name="versions"][value="${this.chosenVersion()?.id}"]:checked`)) this.clearChosenVersion();
         content.querySelector('.client-empty')?.remove();
         content.insertBefore(this.jobRow(result.job, true), form.closest('details').nextSibling);
         form.closest('details').open = false;
@@ -236,6 +259,7 @@ export class ClientDirectory {
     const status = node('p', '', 'field-hint');
     details.append(options, status);
     let page = 1, busy = false;
+    const latestShown = new Set();
     const load = async () => {
       if (busy) return;
       busy = true;
@@ -248,12 +272,26 @@ export class ClientDirectory {
           const label = node('label', '', 'version-choice');
           const input = node('input');
           input.type = 'checkbox'; input.name = 'versions'; input.value = version.id;
+          input.checked = version.id === this.chosenVersion()?.id;
+          // Versions arrive newest first: keep the latest per template visible and tuck older ones away.
+          const older = !!version.agreementId && latestShown.has(version.agreementId) && !input.checked;
+          if (version.agreementId) latestShown.add(version.agreementId);
+          if (older) { label.classList.add('older-version'); label.hidden = !details.dataset.showOlder; }
           label.append(input, node('span', `${version.name} · Version ${version.number}${version.jobId ? ' · This job only' : ''}`), link('Preview', version.previewUrl));
           label.querySelector('a').target = '_blank';
           label.querySelector('a').rel = 'noopener';
           options.append(label);
         }
         page = result.pagination.number + 1;
+        const olderCount = options.querySelectorAll('.older-version').length;
+        let toggle = details.querySelector('.older-toggle');
+        if (olderCount && !details.dataset.showOlder) {
+          toggle ??= node('button', '', 'button secondary older-toggle');
+          toggle.type = 'button';
+          toggle.textContent = `Show older versions (${olderCount})`;
+          toggle.onclick = () => { details.dataset.showOlder = 'true'; options.querySelectorAll('.older-version').forEach(item => { item.hidden = false; }); toggle.remove(); };
+          options.after(toggle);
+        }
         status.textContent = result.pagination.total ? 'Choose up to 20. Each agreement has its own review, signing request and completed PDF.' : 'No ready versions yet. Create this job and upload a document, or prepare a reusable template.';
         if (result.pagination.hasNext) {
           const more = node('button', 'Load more versions', 'button secondary');

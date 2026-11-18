@@ -61,7 +61,7 @@ def agreement_data(agreement, *, include_versions=False):
 def version_data(version, *, preview=False):
     agreement = version.agreement
     data = {
-        "id": str(version.pk), "name": version.name, "number": version.number,
+        "id": str(version.pk), "agreementId": str(agreement.pk), "name": version.name, "number": version.number,
         'sourceRevision': version.source_revision,
         "jobId": str(agreement.job_id) if agreement.job_id else None,
         "roles": version.roles, "publishedAt": version.published_at.isoformat(),

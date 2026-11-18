@@ -5,6 +5,8 @@ class LoginController {
     this.form = form;
     this.client = new SessionClient();
     this.isClient = document.body.dataset.role === 'client';
+    // A code only works with its invitation link; the bare client login page cannot verify one.
+    this.noInvitation = this.isClient && !/\/client\/login\/[0-9a-f-]{36}\/?$/i.test(window.location.pathname);
     this.authenticated = document.body.dataset.authenticated === 'true';
     this.fields = ['email', 'password', 'code'].map(name => document.getElementById(name));
     this.status = document.querySelector('#form-status');
@@ -16,10 +18,12 @@ class LoginController {
     form.addEventListener('input', event => {
       if (this.fields.includes(event.target)) this.clearError(event.target);
       this.status.hidden = true;
+      this.status.classList.remove('is-error');
     });
     form.addEventListener('submit', event => this.submit(event));
     this.toggle.addEventListener('click', () => this.setPasswordVisible(this.password.type === 'password'));
     if (this.authenticated) this.showSignedIn();
+    else if (this.noInvitation) this.showLinkNeeded();
   }
 
   configure() {
@@ -39,6 +43,18 @@ class LoginController {
     document.title = 'Client access · Astra';
   }
 
+  showLinkNeeded() {
+    document.querySelector('#code-field').hidden = true;
+    document.querySelector('#code').disabled = true;
+    this.button.hidden = true;
+    document.querySelector('#form-heading').textContent = 'Open your invitation link';
+    document.querySelector('#form-description').textContent = 'Your access code works together with the signing link the company sent you. Open that link, then enter your code.';
+    document.querySelector('#access-help').open = true;
+    document.querySelector('summary').textContent = 'Can’t find the link?';
+    document.querySelector('#help-copy').textContent = 'Contact the company that invited you. They can share the link and code again or send a new one.';
+    document.querySelector('#access-note').textContent = 'No account needed. Just your invitation link and code.';
+  }
+
   showSignedIn() {
     if (!this.isClient && document.body.dataset.dashboardUrl) {
       window.location.replace(document.body.dataset.dashboardUrl);
@@ -48,7 +64,9 @@ class LoginController {
     for (const input of this.fields) document.getElementById(`${input.id}-field`).hidden = true;
     document.querySelector('.help-row').hidden = true;
     document.querySelector('#form-heading').textContent = 'You’re logged in.';
-    document.querySelector('#form-description').textContent = 'Your client dashboard will be added next.';
+    document.querySelector('#form-description').textContent = this.isClient
+      ? 'To open an agreement, use the signing link from your invitation.'
+      : 'Your company workspace is ready.';
     document.querySelector('#access-note').textContent = 'You can safely log out here.';
     this.label.textContent = 'Log out';
   }
@@ -104,7 +122,13 @@ class LoginController {
     } catch (error) {
       if (signingOut && error.status === 401) return window.location.reload();
       this.status.textContent = error.message;
+      this.status.classList.add('is-error');
       this.status.hidden = false;
+      if (this.isClient) {
+        const code = document.querySelector('#code');
+        code.setAttribute('aria-invalid', 'true');
+        code.select();
+      }
     } finally {
       this.button.disabled = false;
       this.button.removeAttribute('aria-busy');

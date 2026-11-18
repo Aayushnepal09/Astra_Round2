@@ -59,7 +59,9 @@ class RequestExpiryChecks(LifecycleFixture, TestCase):
         url = reverse("client_invitation", args=[invitation.pk])
         post = lambda code: Client().post(url, {"code": code}, content_type="application/json")
         wrong = "000000" if demo_code(invitation) != "000000" else "111111"
-        self.assertEqual(post(wrong).status_code, 401)
+        failed = post(wrong)
+        self.assertEqual(failed.status_code, 401)
+        self.assertIn("4 attempts left", failed.json()["error"])
         self.assertEqual(post(demo_code(invitation)).status_code, 200)
         invitation.refresh_from_db()
         first_use, attempts_after_success = invitation.used_at, invitation.attempts

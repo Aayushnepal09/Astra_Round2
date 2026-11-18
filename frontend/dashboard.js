@@ -1,6 +1,6 @@
 import { SessionClient } from './shared/ui.js';
-import { AgreementWorkspace } from './agreements.js?v=ui22';
-import { ClientDirectory } from './client_workspace.js?v=ui26';
+import { AgreementWorkspace } from './agreements.js?v=ui32';
+import { ClientDirectory } from './client_workspace.js?v=ui32';
 
 class WorkspaceDashboard {
   static views = new Map([

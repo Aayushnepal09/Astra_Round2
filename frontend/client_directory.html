@@ -14,6 +14,7 @@
     </form>
   </details>
   <div class="client-search"><label for="client-search">Find a client or job</label><input id="client-search" type="search" maxlength="200" placeholder="Client name, email or job reference" autocomplete="off"></div>
+  <div class="use-version-banner" id="use-version-banner" hidden><p></p><button class="button secondary" type="button" id="use-version-clear">Clear</button></div>
   <p id="client-directory-status" class="field-hint" role="status" aria-live="polite">Open Clients to load your directory.</p><button id="clients-retry" class="button secondary" type="button" hidden>Retry loading clients</button>
   <div id="client-list" class="client-list"></div>
   <nav id="clients-pagination" class="client-pagination" aria-label="Client pages" hidden><button id="clients-previous" class="button secondary" type="button">Previous clients</button><span id="clients-page"></span><button id="clients-next" class="button secondary" type="button">Next clients</button></nav>

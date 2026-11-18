@@ -1,5 +1,5 @@
 import { SessionClient, SessionError } from './shared/ui.js';
-import { FieldSuggestions } from './field_suggestions.js?v=workflow2';
+import { FieldSuggestions } from './field_suggestions.js?v=ui32';
 import { ScrollDocument } from './shared/scroll_document.js';
 
 export class AgreementWorkspace {
@@ -35,6 +35,12 @@ export class AgreementWorkspace {
   }
 
   element(id) { return document.getElementById(id); }
+
+  // The Clients page reads this to show which template is being sent and pre-tick it in the new job.
+  rememberVersion(version) {
+    if (!version?.id) return;
+    try { sessionStorage.setItem('astra.useVersion', JSON.stringify({ id: version.id, label: `${version.name} · Version ${version.number}` })); } catch {}
+  }
 
   chooseFile(file) {
     this.file = file;
@@ -110,8 +116,12 @@ export class AgreementWorkspace {
     this.element('agreement-field-editor').addEventListener('input', event => this.updateSelectedField(event));
     this.element('agreement-field-editor').addEventListener('change', event => this.updateSelectedField(event));
     this.element('agreement-fields-save').addEventListener('click', () => this.saveFields());
+    this.element('preparation-action').addEventListener('click', () => this.runPreparationAction());
+    this.element('agreement-undo-delete').addEventListener('click', () => this.undoDelete());
+    this.element('agreement-create-file').addEventListener('click', () => this.rememberVersion(this.agreement?.versions?.[0]));
     this.element('agreement-template-name').addEventListener('input', () => this.markFieldsDirty('Unsaved template name or field changes.'));
-    this.element('agreement-publish').addEventListener('click', () => this.publishTemplate());
+    this.element('agreement-publish').addEventListener('click', () => this.saveAndPublish());
+    this.element('publish-checklist-items').addEventListener('click', event => this.fixChecklistItem(event.target.closest('[data-fix]')?.dataset.fix));
     this.element('agreement-fields-reload').addEventListener('click', () => {
       if (this.agreement && this.confirmLeave()) this.open(this.agreement.id);
     });
@@ -280,7 +290,7 @@ export class AgreementWorkspace {
         const prepare = document.createElement('a'); prepare.href = link.href; prepare.className = 'button secondary compact';
         prepare.textContent = ready ? 'Review / edit' : 'Prepare fields'; prepare.addEventListener('click', event => { if (this.plainClick(event)) { event.preventDefault(); this.navigateWorkspace(`templates/${agreement.id}`); } });
         actions.append(prepare);
-        if (ready) { const use = document.createElement('a'); use.href = '#files'; use.dataset.view = 'files'; use.className = 'button compact'; use.textContent = 'Use for client'; actions.append(use); }
+        if (ready) { const use = document.createElement('a'); use.href = '#clients'; use.dataset.view = 'clients'; use.className = 'button compact'; use.textContent = 'Use for client'; use.addEventListener('click', () => this.rememberVersion(agreement.readyVersion)); actions.append(use); }
         item.append(nameCell, stateCell, details, actions);
         fragment.append(item);
       }
@@ -497,6 +507,8 @@ export class AgreementWorkspace {
   }
 
   markFieldsDirty(message = 'Unsaved field changes.') {
+    this.lastDeleted = null;
+    this.element('agreement-undo-delete').hidden = true;
     this.fieldsDirty = true;
     this.fieldEditVersion++;
     this.element('agreement-fields-status').textContent = message;
@@ -505,7 +517,7 @@ export class AgreementWorkspace {
     this.updatePublicationControls();
   }
 
-  addField(type) {
+  addField(type, overrides = {}) {
     if (!this.agreement || this.agreement.processingState !== 'ready') return;
     if (this.fields.length >= 200) {
       this.element('agreement-fields-status').textContent = 'A draft supports up to 200 fields. Delete a field before adding another.';
@@ -519,6 +531,7 @@ export class AgreementWorkspace {
       id: crypto.randomUUID(), type, label: labels[type] || 'Field',
       required: true, role: 'client', page: this.pageNumber,
       x: 0.1, y: 0.1, width: type === 'signature' ? 0.28 : 0.24, height: type === 'acknowledgement' ? 0.09 : 0.06,
+      ...overrides,
     };
     this.fields.push(field);
     this.selectedFieldId = field.id;
@@ -528,10 +541,25 @@ export class AgreementWorkspace {
 
   deleteSelectedField() {
     if (!this.selectedFieldId) return;
-    this.fields = this.fields.filter(field => field.id !== this.selectedFieldId);
+    const index = this.fields.findIndex(field => field.id === this.selectedFieldId);
+    if (index < 0) return;
+    const [removed] = this.fields.splice(index, 1);
     this.selectedFieldId = null;
-    this.markFieldsDirty();
+    this.markFieldsDirty(`Deleted “${removed.label || removed.type}”.`);
+    // Kept until the next edit, so an accidental delete is one click to reverse.
+    this.lastDeleted = { field: removed, index };
+    this.element('agreement-undo-delete').hidden = false;
     this.renderFields();
+  }
+
+  undoDelete() {
+    if (!this.lastDeleted) return;
+    const { field, index } = this.lastDeleted;
+    this.fields.splice(Math.min(index, this.fields.length), 0, field);
+    this.selectedFieldId = field.id;
+    this.markFieldsDirty(`Restored “${field.label || field.type}”.`);
+    this.renderFields();
+    this.revealField(field);
   }
 
   updateSelectedField(event) {
@@ -741,15 +769,15 @@ export class AgreementWorkspace {
     this.suggestions?.update();
     this.element('agreement-add-to-job').disabled = this.fieldsDirty || this.fieldsSaving || this.publishing || !!this.addingToJob;
     const button = this.element('agreement-publish');
-    button.disabled = !this.agreement || this.publishedView || this.fieldsDirty || this.fieldsSaving || this.publishing;
+    button.disabled = !this.agreement || this.publishedView || this.fieldsSaving || this.publishing;
     const issues = [];
     if (!this.element('agreement-template-name').value.trim()) issues.push('Name this agreement.');
     if (!this.fields.some(field => field.role === 'client' && field.type === 'signature' && field.required)) issues.push('Add a required client signature.');
     if (this.fields.some(field => field.role === 'company') && !this.fields.some(field => field.role === 'company' && field.type === 'signature' && field.required)) issues.push('Add a required company signature.');
     const latest = this.agreement?.versions?.[0] || this.agreement?.readyVersion;
     const prepared = this.publishedView || !!latest && !this.fieldsDirty && latest.sourceRevision === this.agreement?.fieldsRevision;
-    this.element('preparation-status').textContent = this.publishedView ? 'Ready version · read only' : this.fieldsDirty ? 'Unsaved field changes' : prepared ? 'Preparation complete' : issues.length ? 'Preparation in progress' : 'Ready to finish preparation';
-    this.element('preparation-next').textContent = this.publishedView ? 'This version is fixed and ready for use.' : this.fieldsDirty ? 'Save the field draft, then finish preparation. Existing published versions stay unchanged.' : prepared ? 'Use this ready version for a client and job.' : issues.length ? issues.join(' ') : 'Fields are saved. Finish preparation to make this version ready; nothing is sent to the client yet.';
+    this.element('preparation-status').textContent = this.publishedView ? 'Ready version · read only' : this.fieldsDirty ? 'Unsaved field changes' : prepared ? 'Preparation complete' : issues.length ? 'Preparation in progress' : 'Ready to publish';
+    this.element('preparation-next').textContent = this.publishedView ? 'This version is fixed and ready for use.' : this.fieldsDirty ? 'Save the field draft, then finish preparation. Existing published versions stay unchanged.' : prepared ? 'Use this ready version for a client and job.' : issues.length ? issues.join(' ') : 'Fields are saved. Publish this version to make it ready to use; nothing is sent to the client yet.';
     for (const step of this.element('preparation-progress').querySelectorAll('[data-prep-step]')) {
       step.dataset.state = step.dataset.prepStep === 'upload' || (step.dataset.prepStep === 'fields' && !issues.length) || prepared ? 'done' : 'pending';
     }
@@ -762,22 +790,90 @@ export class AgreementWorkspace {
       ? 'Save your draft changes before publishing.'
       : prepared ? 'Ready to use. Review and issue a signing request from the client’s job.' : issues.length ? issues.join(' ') : 'Creates a ready, fixed version. You will review the recipient before sending.';
     this.renderEditorState(issues, latest, prepared);
+    this.renderPreparationAction(issues, latest, prepared);
+  }
+
+  // The setup card offers the same next step as the editor, so the overview is never a dead end.
+  renderPreparationAction(issues, latest, prepared) {
+    const button = this.element('preparation-action');
+    const next = (latest?.number || 0) + 1;
+    const [action, label] = !this.agreement || this.publishedView ? [null, '']
+      : this.fieldsDirty ? (issues.length ? ['save', 'Save draft'] : ['publish', `Save & publish version ${next}`])
+      : prepared ? ['use', this.jobId ? 'Add to this job →' : 'Use for a client →']
+      : issues.length ? ['prepare', 'Prepare fields →']
+      : ['publish', `Publish version ${next}`];
+    button.hidden = !action;
+    button.dataset.action = action || '';
+    button.textContent = this.publishing ? 'Publishing…' : this.fieldsSaving ? 'Saving…' : label;
+    button.disabled = this.publishing || this.fieldsSaving || !!this.addingToJob;
+  }
+
+  runPreparationAction() {
+    const action = this.element('preparation-action').dataset.action;
+    if (action === 'save') this.saveFields();
+    else if (action === 'publish') this.saveAndPublish();
+    else if (action === 'use') this.element(this.jobId ? 'agreement-add-to-job' : 'agreement-create-file').click();
+    else if (action === 'prepare' && this.element('agreement-field-editor').hidden) this.element('agreement-prepare-toggle').click();
   }
 
   // One status line drives which main action the editor shows: save, publish, or use the live version.
   renderEditorState(issues, latest, prepared) {
     const next = (latest?.number || 0) + 1;
-    const missing = `${issues.length} thing${issues.length === 1 ? '' : 's'} missing: ${issues.join(' ')}`;
     const [state, text] = this.publishedView ? ['live', 'Published version · read only.']
       : this.publishing ? ['publishing', `Publishing version ${next}…`]
       : this.fieldsSaving ? ['saving', 'Saving draft…']
-      : this.fieldsDirty ? ['unsaved', 'Unsaved changes. Save your draft to keep them.']
+      : this.fieldsDirty ? ['unsaved', issues.length ? 'Unsaved changes. Save your draft to keep them.' : `Unsaved changes. Save & publish to make version ${next} ready to use.`]
       : prepared ? ['live', `Version ${latest.number} is live and ready to use for clients.`]
-      : issues.length ? ['blocked', `Draft saved · ${missing}`]
+      : issues.length ? ['blocked', 'Draft saved · not ready to publish yet.']
       : ['ready', `Draft saved · ready to publish as version ${next}.`];
     this.element('agreement-field-editor').dataset.editorState = state;
     this.element('editor-state').textContent = text;
-    if (!this.publishing && state === 'ready') this.element('agreement-publish').textContent = `Publish version ${next}`;
+    const publish = this.element('agreement-publish');
+    publish.textContent = this.publishing ? `Publishing version ${next}…` : `${this.fieldsDirty ? 'Save & publish' : 'Publish'} version ${next}`;
+    publish.title = issues.length ? `Still needed: ${issues.join(' ')}` : '';
+    this.renderChecklist(issues);
+  }
+
+  // Each blocker is listed with a one-click fix, so publishing never feels like a dead end.
+  renderChecklist(issues) {
+    const fixes = {
+      'Name this agreement.': ['name', 'Name it'],
+      'Add a required client signature.': ['client-signature', 'Add client signature box'],
+      'Add a required company signature.': ['company-signature', 'Add company signature box'],
+    };
+    const list = this.element('publish-checklist-items');
+    list.replaceChildren(...issues.map(issue => {
+      const item = document.createElement('li');
+      item.append(issue);
+      const fix = fixes[issue];
+      if (fix && !this.publishedView) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'button secondary';
+        button.dataset.fix = fix[0];
+        button.textContent = fix[1];
+        item.append(button);
+      }
+      return item;
+    }));
+    this.element('publish-checklist').hidden = !issues.length || this.publishedView;
+  }
+
+  fixChecklistItem(fix) {
+    if (fix === 'name') {
+      const name = this.element('agreement-template-name');
+      name.scrollIntoView({ block: 'center' });
+      name.focus();
+    } else if (fix === 'client-signature') this.addField('signature', { label: 'Client signature' });
+    else if (fix === 'company-signature') this.addField('signature', { label: 'Company signature', role: 'company' });
+  }
+
+  async saveAndPublish() {
+    if (this.fieldsDirty) {
+      await this.saveFields();
+      if (this.fieldsDirty) return;
+    }
+    return this.publishTemplate();
   }
 
   async addToJob() {
@@ -867,6 +963,7 @@ export class AgreementWorkspace {
           await this.addToJob();
         } else {
           this.element('preparation-complete-copy').textContent = `${payload.version.name} · Version ${payload.version.number} is ready. Choose a client and job to review and send it.`;
+          this.rememberVersion(payload.version);
           this.element('preparation-complete').hidden = false;
           this.navigateWorkspace('templates');
           this.element('preparation-complete').scrollIntoView({block:'center',behavior:'smooth'});

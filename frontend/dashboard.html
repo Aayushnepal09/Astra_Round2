@@ -1,12 +1,12 @@
 {% extends "shared/base.html" %}
 {% block title %}Your workspace · Astra{% endblock %}
 {% block resources %}
-  <link rel="stylesheet" href="{{ static_prefix }}dashboard.css?v=ui26">
-  <link rel="stylesheet" href="{{ static_prefix }}agreements.css?v=ui26">
-  <link rel="stylesheet" href="{{ static_prefix }}shared/scroll_document.css?v=ui26">
-  <script type="module" src="{{ static_prefix }}dashboard.js?v=ui26"></script>
-  <link rel="stylesheet" href="{{ static_prefix }}workflow.css?v=ui26">
-  <link rel="stylesheet" href="{{ static_prefix }}reference.css?v=ui26">
+  <link rel="stylesheet" href="{{ static_prefix }}dashboard.css?v=ui32">
+  <link rel="stylesheet" href="{{ static_prefix }}agreements.css?v=ui32">
+  <link rel="stylesheet" href="{{ static_prefix }}shared/scroll_document.css?v=ui32">
+  <script type="module" src="{{ static_prefix }}dashboard.js?v=ui32"></script>
+  <link rel="stylesheet" href="{{ static_prefix }}workflow.css?v=ui32">
+  <link rel="stylesheet" href="{{ static_prefix }}reference.css?v=ui32">
 {% endblock %}
 {% block body_attributes %}class="dashboard reference-ui" data-logout-url="{{ logout_url }}" data-login-url="{{ login_url }}" data-files-url="{{ files_url }}" data-agreements-url="{{ agreements_url }}" data-company-id="{{ company_id }}" data-clients-url="{{ clients_url }}" data-templates-url="{{ templates_url }}" data-upload-job="{{ upload_job.id }}" data-job-add-url="{{ job_add_url }}"{% endblock %}
 {% block content %}
@@ -109,7 +109,7 @@
             <div id="agreement-preview-error" class="agreement-inline-error" role="alert" hidden><p></p><button class="button secondary" type="button" id="retry-agreement-preview">Try again</button></div>
             <div class="agreement-preview-toolbar" id="agreement-preview-toolbar" hidden><div class="agreement-page-navigation"><button class="button secondary" type="button" id="previous-agreement-page" hidden>Previous page</button><label for="agreement-page-number">Page <input type="number" id="agreement-page-number" min="1" value="1" inputmode="numeric"> <span id="agreement-page-total"></span></label><button class="button secondary" type="button" id="next-agreement-page" hidden>Next page</button></div><div class="agreement-preview-actions"><button class="button secondary" type="button" id="agreement-zoom" aria-pressed="false">Enlarge page</button><button class="button" type="button" id="agreement-prepare-toggle" aria-expanded="false" aria-controls="agreement-field-editor">Prepare fields</button></div></div>
             <p class="agreement-page-status" id="agreement-page-status" role="status" aria-live="polite"></p>
-            <section id="preparation-progress" class="preparation-progress" aria-label="Preparation progress" hidden><ol><li data-prep-step="upload">Document uploaded</li><li data-prep-step="fields">Review fields</li><li data-prep-step="ready">Ready to use</li></ol><strong id="preparation-status" role="status" aria-live="polite"></strong><p id="preparation-next"></p></section>
+            <section id="preparation-progress" class="preparation-progress" aria-label="Preparation progress" hidden><ol><li data-prep-step="upload">Document uploaded</li><li data-prep-step="fields">Review fields</li><li data-prep-step="ready">Ready to use</li></ol><strong id="preparation-status" role="status" aria-live="polite"></strong><p id="preparation-next"></p><button class="button" type="button" id="preparation-action" hidden></button></section>
 
             <section id="agreement-published-versions" class="agreement-published-versions" aria-labelledby="published-versions-title" hidden><h4 id="published-versions-title">Published versions</h4><p class="availability-note">Each version preserves its PDF and field configuration. Continue editing through the preparation draft.</p><ul id="agreement-version-list"></ul></section>
             <div class="agreement-preparation-layout">
@@ -117,20 +117,21 @@
             <section class="agreement-field-editor" id="agreement-field-editor" aria-label="Agreement field preparation" hidden>
               <div class="preparation-action-bar">
               <p class="editor-state" id="editor-state" role="status" aria-live="polite"></p>
+              <div class="publish-checklist" id="publish-checklist" hidden><strong>To publish, still needed:</strong><ul id="publish-checklist-items"></ul></div>
               <div class="agreement-publish-controls"><label for="agreement-template-name">Agreement / template name<input id="agreement-template-name" type="text" maxlength="200" autocomplete="off" aria-describedby="agreement-publish-hint"></label><button class="button" type="button" id="agreement-publish">Finish preparation</button></div>
               <p class="availability-note" id="agreement-publish-hint">Save your draft before publishing.</p>
               <a class="button" id="agreement-create-file" href="#clients" data-view="clients" hidden>Use for a client →</a>
               <button class="button" id="agreement-add-to-job" type="button" hidden>Add latest ready version to this job</button><p id="agreement-job-status" class="field-hint" role="status" aria-live="polite"></p>
               <p id="agreement-publish-status" role="status" aria-live="polite"></p>
               <div class="agreement-inline-error" id="agreement-publish-error" role="alert" hidden><p></p><a href="{{ login_url }}" target="_blank" rel="noopener">Sign in in a new tab</a></div>
-              <div class="agreement-save-actions"><span id="agreement-fields-status" role="status" aria-live="polite">No field changes.</span><button class="button" type="button" id="agreement-fields-save" disabled>Save draft</button></div>
+              <div class="agreement-save-actions"><span id="agreement-fields-status" role="status" aria-live="polite">No field changes.</span><button class="button secondary" type="button" id="agreement-undo-delete" hidden>Undo delete</button><button class="button" type="button" id="agreement-fields-save" disabled>Save draft</button></div>
               </div>
               <section class="agreement-ai-fields" id="agreement-ai-fields" aria-label="AI field suggestions">
                 <h3>AI field helper</h3>
                 <button class="button ai-button" type="button" id="agreement-suggest-fields" disabled>Find fields with AI</button>
                 <p class="availability-note">Clear field labels are detected locally. When needed, ambiguous document text is sent to Groq for classification. Review every suggested role and position; nothing is added automatically.</p>
                 <p id="agreement-suggestion-status" role="status" aria-live="polite"></p>
-                <ul id="agreement-suggestion-list" aria-label="Suggested fields"></ul>
+                <button class="button" type="button" id="agreement-suggestions-add-all" hidden>Add all suggestions</button><ul id="agreement-suggestion-list" aria-label="Suggested fields"></ul>
                 <button class="button secondary" type="button" id="agreement-suggestions-dismiss" hidden>Dismiss suggestions</button>
               </section>
               <p class="availability-note">Placeholders only. No signatures are collected here. Save incomplete preparation as a draft.</p>

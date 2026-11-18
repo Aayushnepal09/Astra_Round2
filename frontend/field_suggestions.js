@@ -13,6 +13,7 @@ export class FieldSuggestions {
     this.orderCounter = 0;
     this.button.addEventListener('click', () => this.request());
     document.querySelector('#agreement-suggestions-dismiss').addEventListener('click', () => this.reset());
+    document.querySelector('#agreement-suggestions-add-all')?.addEventListener('click', () => this.addAll());
   }
 
   reset() {
@@ -38,6 +39,13 @@ export class FieldSuggestions {
     this.button.textContent = this.busy ? 'Finding fillable fields…' : 'Find fields with AI';
     this.button.setAttribute('aria-busy', String(!!this.busy));
     document.querySelector('#agreement-suggestions-dismiss').hidden = !this.proposals.length;
+    const addAll = document.querySelector('#agreement-suggestions-add-all');
+    if (addAll) {
+      const pending = this.proposals.filter(proposal => !this.matchingField(proposal)).length;
+      addAll.hidden = pending < 2;
+      addAll.textContent = `Add all ${pending} suggestions`;
+      addAll.disabled = w.publishedView || w.fieldsSaving || w.publishing;
+    }
     for (const proposal of this.proposals) {
       const row = this.rows.get(proposal);
       if (!row) continue;
@@ -216,6 +224,24 @@ export class FieldSuggestions {
     Object.assign(marker.style, { left: `${field.x*100}%`, top: `${field.y*100}%`, width: `${field.width*100}%`, height: `${field.height*100}%` });
     const layer = this.workspace.viewer?.pages.get(field.page)?.proposals || this.layer;
     layer.append(marker);
+  }
+
+  // One click for the common case; every added box stays editable and removable before saving.
+  addAll() {
+    const w = this.workspace;
+    if (w.publishedView || w.fieldsSaving || w.publishing) return;
+    const pending = this.proposals.filter(proposal => !this.matchingField(proposal)).slice(0, Math.max(0, 200 - w.fields.length));
+    if (!pending.length) return;
+    for (const proposal of pending) {
+      const { evidence, ...field } = proposal;
+      field.id = crypto.randomUUID();
+      w.fields.push(field);
+      this.accepted.set(proposal, field.id);
+    }
+    w.markFieldsDirty(`${pending.length} suggested fields added. Check each role and position, then save.`);
+    this.selected = null;
+    this.status.textContent = `Added ${pending.length} suggested fields. Check each box's position and who completes it, then save.`;
+    this.renderPreview(); this.update();
   }
 
   add(proposal) {

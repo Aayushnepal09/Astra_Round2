@@ -742,6 +742,7 @@ class ClientFileEditor {
     if (!invitation) return;
     this.renderStage(invitation.progress);
     document.querySelector('#invitation-open').textContent = invitation.readOnly ? 'View client access link & code' : 'View invitation link & code';
+    document.querySelector('#invitation-open').classList.toggle('secondary', invitation.progress !== 'awaiting_client');
     if (this.renderedRequestId !== invitation.requestId) {
       // A freshly sent invitation opens straight away; reloads keep it one click away.
       if (issuedHere && invitation.progress === 'awaiting_client') this.showInvitation();

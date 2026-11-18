@@ -61,3 +61,5 @@ details p { color: var(--muted); margin: 8px 0 0; max-width: 38ch; }
   .site-footer span:last-child { text-align: right; }
 }
 
+/* Errors read as errors: red tone, and the code box is highlighted. */
+.form-status.is-error { color: var(--error); background: #fdeeec; border: 1px solid #f1c4bf; }
