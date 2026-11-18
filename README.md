@@ -85,3 +85,7 @@ Linux server setup (Ubuntu 24.04 with Caddy, Gunicorn and PostgreSQL) and the re
 ### More detail
 
 Behaviour, limits and design notes for every feature are in [`docs/details.md`](docs/details.md).
+
+## License
+
+All rights reserved, across all versions, releases, branches, tags and historical commits. This project is a work sample made for a job application to Astra AI. It may be viewed, run and tested only to evaluate that application. Any other use, copying, recreation, modification, publication, distribution or reuse of any part requires the author's prior written permission, subject to the exceptions in [LICENSE](LICENSE). This is not an open-source license.

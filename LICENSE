@@ -1,0 +1,55 @@
+Copyright (c) 2026 Aayushnepal09. All rights reserved.
+
+Astra — agreement preparation and signing
+
+This software, including its source code, design, user interface, documentation,
+screenshots and other materials in this repository (the "Work"), was created as a
+work sample for a job application to Astra AI. It is shared only so that the
+hiring team can review the author's work.
+
+These terms cover all versions of the Work, including all past, current and
+future versions, releases, branches, tags, historical commits, copies and
+distributions, unless the author expressly provides different written terms
+for a particular version. They apply to the Work in whole and to every part
+of it, to the extent the author holds the applicable rights.
+
+1. Permitted use
+
+   Astra AI and the people it involves in evaluating this application may view,
+   run, test and assess the Work, privately and only for the purpose of
+   evaluating the author's application. This permission ends when the hiring
+   process ends.
+
+2. Not permitted without the author's prior written permission
+
+   - copying, reproducing or recreating the Work, in whole or in part;
+   - modifying it or creating derivative works based on it;
+   - publishing, distributing, sublicensing or sharing it with anyone outside
+     the purpose in section 1;
+   - using it, or any part of it, in a product, service or commercial activity;
+   - any other use, including personal, internal, educational, research or
+     non-commercial use, outside the evaluation permission in section 1;
+   - using it to train or evaluate machine-learning models.
+
+3. No other rights
+
+   No licence or other right is granted by implication, estoppel or otherwise,
+   except as stated in section 1. Making this repository visible does not place
+   the Work in the public domain or grant any open-source licence.
+
+   Nothing here limits rights that cannot lawfully be restricted, rights
+   required by the hosting platform's applicable terms, or permissions the
+   author has already validly granted under separate terms.
+
+4. Third-party components
+
+   Third-party libraries and services used by the Work remain under their own
+   licences. Nothing here changes those licences.
+
+5. No warranty
+
+   The Work is provided "as is", without warranty of any kind. The author is
+   not liable for any claim, damage or other liability arising from its use.
+
+To request permission for any other use, contact the author through GitHub
+(https://github.com/Aayushnepal09).
